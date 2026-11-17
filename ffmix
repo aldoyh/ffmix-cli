@@ -1,0 +1,33 @@
+#!/usr/bin/env php
+<?php
+
+$artisan = __DIR__.'/artisan';
+$args = array_slice($_SERVER['argv'] ?? [], 1);
+
+$subcommands = [
+    'probe',
+    'convert',
+    'bitrate',
+    'quality',
+    'contact-sheet',
+    'merge',
+    'images',
+    'dropzone',
+    'presets',
+    'catalog',
+    'transition',
+    'watchdog',
+    'dsk',
+    'show',
+];
+
+$command = 'ffmix';
+if ($args !== [] && in_array($args[0], $subcommands, true)) {
+    $command = 'ffmix:'.array_shift($args);
+}
+
+$forwarded = array_merge([PHP_BINARY, $artisan, $command], $args);
+$escaped = implode(' ', array_map('escapeshellarg', $forwarded));
+
+passthru($escaped, $exitCode);
+exit((int) $exitCode);
