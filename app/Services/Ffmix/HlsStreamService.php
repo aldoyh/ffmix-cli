@@ -11,16 +11,13 @@ use RuntimeException;
  */
 class HlsStreamService
 {
-    /**
-     * Parse an HLS master playlist and return available quality levels.
-     *
-     * @return array{stream_url: string, qualities: list<array{bandwidth: int, resolution: string|null, codec: string|null, url: string}>}
-     */
+    /** Parse an HLS master playlist and return available quality levels. */
     public function probePlaylist(string $playlistUrl, int $timeoutSeconds = 15): array
     {
         $result = Process::timeout($timeoutSeconds)->run([
             'curl', '-sSL', '--max-time', (string) $timeoutSeconds, '-o', '-', $playlistUrl,
         ]);
+
         if (! $result->successful()) {
             throw new RuntimeException('Failed to fetch HLS playlist: '.$playlistUrl);
         }
@@ -48,8 +45,8 @@ class HlsStreamService
         );
 
         foreach ($matches as $match) {
-            $streamInf  = $match[1];
-            $variant    = trim($match[2]);
+            $streamInf = $match[1];
+            $variant = trim($match[2]);
 
             $bandwidth = 0;
             if (preg_match('/BANDWIDTH=(\d+)/', $streamInf, $b) === 1) {
@@ -85,6 +82,7 @@ class HlsStreamService
             ];
         }
 
+        // Sort by bandwidth descending (best first)
         usort($qualities, static fn (array $a, array $b): int => $b['bandwidth'] <=> $a['bandwidth']);
 
         return [
@@ -93,11 +91,7 @@ class HlsStreamService
         ];
     }
 
-    /**
-     * Probe a media stream / playlist for codec, resolution, duration, fps.
-     *
-     * @return array{codec: string|null, width: int|null, height: int|null, duration: float|null, frame_rate: float|null, audio_codec: string|null}
-     */
+    /** Probe a media stream / playlist for codec, resolution, duration, fps. */
     public function probeMediaStream(string $streamUrl, int $timeoutSeconds = 15): array
     {
         $ffprobeBin = (string) config('ffmix.binaries.ffprobe', 'ffprobe');
@@ -152,12 +146,7 @@ class HlsStreamService
         ];
     }
 
-    /**
-     * Build FFmpeg arguments to remux an HLS stream into a local MP4 file.
-     *
-     * @param  int|null  $resolutionIndex  1-based index into qualities ladder (null = best/master URL)
-     * @return list<string>
-     */
+    /** Build FFmpeg arguments to remux an HLS stream into a local MP4 file. */
     public function buildRecordCommand(string $streamUrl, string $outputPath, ?int $resolutionIndex = null, int $recordSeconds = 60): array
     {
         $ffmpegBin = (string) config('ffmix.binaries.ffmpeg', 'ffmpeg');
@@ -187,11 +176,7 @@ class HlsStreamService
         ];
     }
 
-    /**
-     * Build FFmpeg arguments to generate HLS output from an input file.
-     *
-     * @return list<string>
-     */
+    /** Build FFmpeg arguments to generate HLS output from an input file. */
     public function buildHlsOutputCommand(string $inputPath, string $outputDir, string $segmentName = 'segment', int $segmentDuration = 4, int $listDuration = 0): array
     {
         $ffmpegBin = (string) config('ffmix.binaries.ffmpeg', 'ffmpeg');
@@ -208,12 +193,7 @@ class HlsStreamService
         ];
     }
 
-    /**
-     * Build FFmpeg arguments to generate an HLS stream from a live source with optional overlay.
-     *
-     * @param  array<string, mixed>|null  $overlay  keys: path, x, y, opacity, start, end
-     * @return list<string>
-     */
+    /** Build FFmpeg arguments to generate an HLS stream from a live source with optional overlay. */
     public function buildHlsLiveCommand(
         string $sourcePath,
         string $outputDir,
@@ -243,7 +223,7 @@ class HlsStreamService
                 $x,
                 $y,
                 ($start !== null && $end !== null)
-                    ? sprintf(":enable='between(t,%.2f,%.2f)'", $start, $end)
+                    ? sprintf(':enable=\'between(t,%.2f,%.2f)\'', $start, $end)
                     : ''
             );
 
@@ -278,6 +258,7 @@ class HlsStreamService
         return $args;
     }
 
+    /** Resolve a variant URL from an HLS playlist. */
     private function resolveVariantUrl(string $scheme, string $host, ?int $port, string $base, string $variant): string
     {
         if (str_starts_with($variant, 'http://') || str_starts_with($variant, 'https://')) {

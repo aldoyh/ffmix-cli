@@ -21,12 +21,7 @@ class StreamService
         private DownstreamKeyService $dsk,
     ) {}
 
-    /**
-     * Create a new media job record for tracking a live stream session.
-     *
-     * @param  array<string, mixed>  $config
-     * @return MediaJob
-     */
+    /** Create a new media job record for tracking a live stream session. */
     public function createJob(string $sessionKey, string $sourceUrl, array $config): MediaJob
     {
         return MediaJob::create([
@@ -79,12 +74,7 @@ class StreamService
         return MediaJob::query()->where('session_key', $sessionKey)->first();
     }
 
-    /**
-     * Build FFmpeg arguments to record an HLS stream to MP4 (direct remux).
-     *
-     * @param  int|null  $resolutionIndex  1-based index into qualities ladder (null = best/master URL)
-     * @return list<string>
-     */
+    /** Build FFmpeg arguments to record an HLS stream to MP4 (direct remux). */
     public function buildRecordStreamArgs(
         string $streamUrl,
         string $outputPath,
@@ -119,12 +109,7 @@ class StreamService
         ];
     }
 
-    /**
-     * Render DSK alpha overlay from HTML template and composite onto recorded video.
-     *
-     * @param  array<string, mixed>  $dskConfig  keys: template_path, title, subtitle, accent, width, height, fps, duration, start
-     * @return array{overlay_path: string, output_path: string, dsk_frames: int}
-     */
+    /** Render DSK alpha overlay from HTML template and composite onto recorded video. */
     public function applyDskToStream(
         string $videoPath,
         string $outputPath,
@@ -168,23 +153,13 @@ class StreamService
         ];
     }
 
-    /**
-     * Build FFmpeg command for live HLS output from a source file with optional overlay.
-     *
-     * @param  array<string, mixed>|null  $overlay  keys: path, x, y, opacity, start, end
-     * @return list<string>
-     */
+    /** Build FFmpeg command for live HLS output from a source file with optional overlay. */
     public function buildHlsLiveArgs(string $sourcePath, string $outputDir, ?array $overlay = null, int $listSize = 10): array
     {
         return $this->hls->buildHlsLiveCommand($sourcePath, $outputDir, $overlay, '4', $listSize);
     }
 
-    /**
-     * Run a full HLS record + DSK overlay pipeline.
-     *
-     * @param  array<string, mixed>  $config  keys: stream_url, output_path, record_seconds, resolution_index, dsk (array)
-     * @return array{output_path: string, duration: int, dsk_frames?: int}
-     */
+    /** Run a full HLS record + DSK overlay pipeline. */
     public function runStreamRecord(array $config): array
     {
         $streamUrl = (string) ($config['stream_url'] ?? '');
@@ -230,5 +205,147 @@ class StreamService
             'output_path' => $outputPath,
             'duration' => $recordSeconds,
         ];
+    }
+
+    /** Probe available stream qualities and return ranked list. */
+    public function probeStreamQualities(string $playlistUrl, int $timeout = 15): array
+    {
+        $playlist = $this->hls->probePlaylist($playlistUrl, $timeout);
+
+        $qualities = $playlist['qualities'];
+        if ($qualities === []) {
+            return [
+                'stream_url' => $playlist['stream_url'],
+                'qualities' => [
+                    [
+                        'bandwidth' => 0,
+                        'resolution' => null,
+                        'codec' => null,
+                        'url' => $playlistUrl,
+                        'isMaster' => true,
+                    ],
+                ],
+            ];
+        }
+
+        // Sort by bandwidth descending (best first)
+        usort($qualities, static fn (array $a, array $b): int => $b['bandwidth'] <=> $a['bandwidth']);
+
+        return [
+            'stream_url' => $playlist['stream_url'],
+            'qualities' => $qualities,
+        ];
+    }
+
+    /** Get the best quality URL from an HLS playlist. */
+    public function getBestQualityUrl(string $playlistUrl): string
+    {
+        $playlist = $this->hls->probePlaylist($playlistUrl, 15);
+        $qualities = $playlist['qualities'];
+
+        if ($qualities === []) {
+            return $playlistUrl;
+        }
+
+        // Return the highest bandwidth quality
+        $best = $qualities[0];
+
+        return $best['url'];
+    }
+
+    /** Build FFmpeg command to generate HLS output from an input file. */
+    public function buildHlsOutputCommand(string $inputPath, string $outputDir, string $segmentName = 'segment', int $segmentDuration = 4, int $listDuration = 0): array
+    {
+        $ffmpegBin = (string) config('ffmix.binaries.ffmpeg', 'ffmpeg');
+
+        return [
+            $ffmpegBin,
+            '-hide_banner', '-y',
+            '-i', $inputPath,
+            '-c', 'copy',
+            '-f', 'hls',
+            '-hls_segment_duration', (string) $segmentDuration,
+            '-hls_list_size', (string) $listDuration,
+            $outputDir.'/'.$segmentName.'.m3u8',
+        ];
+    }
+
+    /** Run full HLS record pipeline with optional DSK overlay, returning job result. */
+    public function executeStreamPipeline(array $config): array
+    {
+        $streamUrl = (string) ($config['stream_url'] ?? '');
+        if ($streamUrl === '') {
+            throw new RuntimeException('stream_url is required.');
+        }
+
+        $outputPath = (string) ($config['output_path'] ?? sys_get_temp_dir().'/ffmix_pipeline_'.uniqid('', true).'.mp4');
+        $recordSeconds = (int) ($config['record_seconds'] ?? 60);
+        $resolutionIndex = $config['resolution_index'] ?? null;
+        $dskConfig = $config['dsk'] ?? [];
+
+        $job = $this->createJob('pipeline_'.uniqid(), $streamUrl, [
+            'stream_url' => $streamUrl,
+            'output_path' => $outputPath,
+            'record_seconds' => $recordSeconds,
+            'resolution_index' => $resolutionIndex,
+            'dsk' => $dskConfig,
+        ]);
+
+        $job = $this->markJobStarted($job);
+
+        try {
+            $outDir = dirname($outputPath);
+            if (! is_dir($outDir)) {
+                @mkdir($outDir, 0775, true);
+            }
+
+            $tmpVideo = $outputPath.'.raw.mp4';
+
+            // Record raw HLS stream
+            $args = $this->buildRecordStreamArgs($streamUrl, $tmpVideo, $recordSeconds, $resolutionIndex);
+            $result = Process::timeout($recordSeconds + 60)->run($args);
+
+            if (! $result->successful()) {
+                throw new RuntimeException('HLS stream recording failed: '.trim($result->errorOutput() ?: $result->output()));
+            }
+
+            // Apply DSK overlay if configured
+            if (! empty($dskConfig) && isset($dskConfig['template_path'])) {
+                $final = $this->applyDskToStream($tmpVideo, $outputPath, $dskConfig);
+                @unlink($tmpVideo);
+
+                $job = $this->markJobFinished($job, $final['output_path']);
+
+                return [
+                    'output_path' => $final['output_path'],
+                    'duration' => $recordSeconds,
+                    'dsk_frames' => $final['dsk_frames'] ?? 0,
+                    'job_id' => $job->id,
+                    'job_status' => $job->status->value,
+                ];
+            }
+
+            @rename($tmpVideo, $outputPath);
+
+            $job = $this->markJobFinished($job, $outputPath);
+
+            return [
+                'output_path' => $outputPath,
+                'duration' => $recordSeconds,
+                'dsk_frames' => 0,
+                'job_id' => $job->id,
+                'job_status' => $job->status->value,
+            ];
+        } catch (Throwable $e) {
+            try {
+                $job = MediaJob::find($job->id ?? 0) ?? $job;
+                if ($job instanceof MediaJob) {
+                    $job = $this->markJobFailed($job, $e->getMessage());
+                }
+            } catch (Throwable) {
+                // Best effort
+            }
+            throw $e;
+        }
     }
 }

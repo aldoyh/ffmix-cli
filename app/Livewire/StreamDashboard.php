@@ -2,30 +2,47 @@
 
 namespace App\Livewire;
 
-use Livewire\Component;
 use App\Models\MediaJob;
 use App\Services\Ffmix\HlsStreamService;
 use App\Services\Ffmix\StreamService;
-use Illuminate\Support\Facades\Process;
-use RuntimeException;
+use Livewire\Component;
 
 class StreamDashboard extends Component
 {
     public $streamUrl = '';
+
     public $streamType = 'hls';
+
     public $status = 'pending';
+
     public $duration = 0;
+
     public $outputPath = '';
+
     public $recordingActive = false;
+
     public $recordedOutput = '';
+
     public $recordedDuration = 0;
+
     public $dskTemplate = '';
+
     public $dskTitle = '';
+
     public $dskSubtitle = '';
+
     public $dskAccent = '#06b6d4';
+
     public $dskOverlayImage = '';
 
+    public $selectedResolution = 0;
+
+    public $availableQualities = [];
+
+    public $resolutionOptions = [];
+
     protected HlsStreamService $hls;
+
     protected StreamService $streamService;
 
     public function __construct()
@@ -37,6 +54,7 @@ class StreamDashboard extends Component
     public function mount()
     {
         $this->refreshJobStatus();
+        $this->loadStreamQualities();
     }
 
     public function refreshJobStatus()
@@ -51,23 +69,75 @@ class StreamDashboard extends Component
         }
     }
 
+    public function loadStreamQualities()
+    {
+        if ($this->streamUrl === '') {
+            $this->availableQualities = [];
+            $this->resolutionOptions = [];
+
+            return;
+        }
+
+        try {
+            $qualities = $this->hls->probeStreamQualities($this->streamUrl, 15);
+            $this->availableQualities = $qualities['qualities'] ?? [];
+
+            // Build resolution options for the UI
+            $this->resolutionOptions = [];
+            foreach ($this->availableQualities as $idx => $q) {
+                $resLabel = $q['resolution'] ?? 'Source';
+                $bandwidth = $q['bandwidth'] ?? 0;
+                $this->resolutionOptions[] = [
+                    'index' => $idx + 1,
+                    'label' => 'Quality '.($idx + 1).': '.$resLabel.' ('.number_format($bandwidth).' bps)',
+                    'bandwidth' => $bandwidth,
+                    'resolution' => $resLabel,
+                    'url' => $q['url'],
+                    'isMaster' => $q['bandwidth'] === 0,
+                ];
+            }
+
+            // Select the best quality by default (highest bandwidth)
+            if (! empty($this->availableQualities)) {
+                $this->selectedResolution = 1; // First = best
+            } else {
+                $this->selectedResolution = 0;
+            }
+        } catch (\Exception $e) {
+            $this->availableQualities = [];
+            $this->resolutionOptions = [];
+            $this->dispatch('error', title: 'Stream Probe Failed', message: $e->getMessage());
+        }
+    }
+
     public function startRecording()
     {
         // Validate stream URL
         if ($this->streamUrl === '') {
             $this->dispatch('error', title: 'Stream URL Required', message: 'Please enter an HLS stream URL.');
+
             return;
+        }
+
+        // Ensure qualities are loaded
+        if (empty($this->availableQualities)) {
+            $this->loadStreamQualities();
         }
 
         $this->recordingActive = true;
         $this->status = 'running';
 
-        // Launch recording in background via artisan command
+        // Determine output path with timestamp
+        $outputFileName = 'ffmix_web_'.date('Ymd_His').'.mp4';
+        $outputPath = sys_get_temp_dir().'/'.$outputFileName;
+
+        // Launch recording in background
         $this->dispatch(
             'start-recording',
             streamUrl: $this->streamUrl,
-            outputPath: sys_get_temp_dir().'/ffmix_web_'.uniqid('.mp4'),
+            outputPath: $outputPath,
             seconds: 30,
+            resolution: $this->selectedResolution,
         );
 
         // Refresh status after short delay
@@ -84,6 +154,10 @@ class StreamDashboard extends Component
     public function setStreamUrl(string $url)
     {
         $this->streamUrl = $url;
+        $this->availableQualities = [];
+        $this->resolutionOptions = [];
+        $this->selectedResolution = 0;
+        $this->dispatch('stream-url-changed', url: $url);
     }
 
     public function render(): mixed
@@ -105,12 +179,14 @@ class StreamDashboard extends Component
             'dskSubtitle' => $this->dskSubtitle,
             'dskAccent' => $this->dskAccent,
             'dskOverlayImage' => $this->dskOverlayImage,
+            'selectedResolution' => $this->selectedResolution,
+            'resolutionOptions' => $this->resolutionOptions,
+            'availableQualities' => $this->availableQualities,
         ]);
     }
 
     protected function refreshAfter(int $milliseconds): void
     {
-        // This dispables a JS refresh after the given milliseconds
-        // The actual status refresh will happen via component re-render
+        // Status refresh happens via component re-render
     }
 }
