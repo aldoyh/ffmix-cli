@@ -19,6 +19,7 @@ $subcommands = [
     'watchdog',
     'dsk',
     'show',
+    'stream',
 ];
 
 $command = 'ffmix';

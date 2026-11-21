@@ -173,5 +173,24 @@
         @if (Route::has('login'))
             <div class="h-14.5 hidden lg:block"></div>
         @endif
-    </body>
+
+    <!-- Multi-Viewer: Broadcast Configuration Overview -->
+    <div class="mt-8 p-6 bg-white dark:bg-[#161615] rounded-lg shadow-sm">
+        <h2 class="text-lg font-medium mb-4">Broadcast Configuration</h2>
+        <ul class="space-y-2 text-sm">
+            <li class="flex items-center gap-3">
+                <span class="w-3 h-3 rounded-full bg-[#FDFDFC] dark:bg-[#161615] border dark:border-[#3E3E3A] border-[#e3e3e0]"></span>
+                <span>DSK Template: {{ config('ffmix.dsk.active_template', 'sample-lower-third.html') }}</span>
+            </li>
+            <li class="flex items-center gap-3">
+                <span class="w-3 h-3 rounded-full bg-[#FDFDFC] dark:bg-[#161615] border dark:border-[#3E3E3A] border-[#e3e3e0]"></span>
+                <span>Active Transition: {{ config('ffmix.transitions.logo_sting.label', 'logo_sting') }}</span>
+            </li>
+            <li class="flex items-center gap-3">
+                <span class="w-3 h-3 rounded-full bg-[#FDFDFC] dark:bg-[#161615] border dark:border-[#3E3E3A] border-[#e3e3e0]"></span>
+                <span>Show Preset: {{ config('ffmix.builtin_show_presets.0.name', 'Main Broadcast Live') }}</span>
+            </li>
+        </ul>
+    </div>
+</body>
 </html>
