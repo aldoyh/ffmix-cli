@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0" />
+  <title>Breaking News Lower Third</title>
+  <meta name="dsk-description" content="Urgent breaking-news lower third with red accent and kinetic reveal" />
+  <style>
+    :root {
+      --accent: #ef4444;
+      --bg: rgba(15, 23, 42, 0.92);
+      --text: #f8fafc;
+      --subtext: #fecaca;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 1920px; height: 1080px; background: transparent !important; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; }
+    .stage { position: relative; width: 100%; height: 100%; }
+    .wrap { position: absolute; left: 88px; bottom: 84px; display: flex; align-items: stretch; will-change: transform, opacity; }
+    .tag { background: var(--accent); color: #fff; font-size: 20px; font-weight: 800; letter-spacing: .12em; padding: 20px 22px; border-radius: 10px 0 0 10px; display: flex; align-items: center; }
+    .card { background: var(--bg); border: 1px solid rgba(239,68,68,.45); border-left: none; border-radius: 0 12px 12px 0; padding: 18px 30px; min-width: 520px; box-shadow: 0 20px 50px rgba(0,0,0,.45); }
+    .title { font-size: 38px; font-weight: 800; color: var(--text); white-space: nowrap; }
+    .subtitle { margin-top: 4px; font-size: 20px; font-weight: 500; color: var(--subtext); white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="wrap" id="lt">
+      <div class="tag" id="tag">BREAKING</div>
+      <div class="card">
+        <div class="title" id="title">Breaking News Update</div>
+        <div class="subtitle" id="subtitle">Live coverage from ffMix Studio</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      const titleText = params.get('title') || 'Breaking News Update';
+      const subtitleText = params.get('subtitle') || 'Live coverage from ffMix Studio';
+      const accent = params.get('accent') || '#ef4444';
+      const totalDuration = Math.max(2.0, parseFloat(params.get('duration') || '6.0'));
+      document.getElementById('title').textContent = titleText;
+      document.getElementById('subtitle').textContent = subtitleText;
+      document.documentElement.style.setProperty('--accent', accent);
+      document.getElementById('tag').style.background = accent;
+      const lt = document.getElementById('lt');
+      const easeOut = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+      const easeIn = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * t; };
+      window.ffmixSeek = function (t) {
+        const inDur = 0.6, outDur = 0.6, outStart = Math.max(inDur, totalDuration - outDur);
+        let opacity = 1, y = 0;
+        if (t < inDur) { const p = easeOut(t / inDur); opacity = p; y = (1 - p) * 40; }
+        else if (t >= outStart) { const p = easeIn((t - outStart) / outDur); opacity = 1 - p; y = p * 40; }
+        lt.style.opacity = opacity.toFixed(4);
+        lt.style.transform = `translate3d(0, ${y.toFixed(2)}px, 0)`;
+      };
+      window.ffmixSeek(0);
+      if (!params.has('manual')) {
+        const start = performance.now();
+        function loop(now) { const elapsed = ((now - start) / 1000) % (totalDuration + 1.0); window.ffmixSeek(Math.min(elapsed, totalDuration)); requestAnimationFrame(loop); }
+        requestAnimationFrame(loop);
+      }
+    })();
+  </script>
+</body>
+</html>

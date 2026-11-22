@@ -11,8 +11,9 @@ use Illuminate\Console\Command;
 class FfmixStreamCommand extends Command
 {
     protected $signature = 'ffmix:stream
-        {action=record : Action (record|hls|list|info|jobs)}
+        {action=record : Action (record|hls|list|info|jobs|monitor)}
         {--stream-url= : HLS master playlist URL}
+        {--monitor-url= : Override monitor dashboard URL}
         {--output= : Output MP4 file path}
         {--seconds=60 : Recording duration in seconds}
         {--resolution= : Quality level index (1=best, 2=2nd, etc.)}
@@ -105,7 +106,11 @@ class FfmixStreamCommand extends Command
             return $this->handleHls($hls);
         }
 
-        $this->error("Unknown action '{$action}'. Use: record, hls, list, info");
+        if ($action === 'monitor') {
+            return $this->handleMonitor();
+        }
+
+        $this->error("Unknown action '{$action}'. Use: record, hls, list, info, monitor");
 
         return self::FAILURE;
     }

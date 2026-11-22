@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0" />
+  <title>Scoreboard Lower Third</title>
+  <meta name="dsk-description" content="Compact scoreboard-style lower third for live stats and updates" />
+  <style>
+    :root { --accent: #f59e0b; --bg: rgba(17, 24, 39, 0.9); --text: #fff; --subtext: #fde68a; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 1920px; height: 1080px; background: transparent !important; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; }
+    .stage { position: relative; width: 100%; height: 100%; }
+    .wrap { position: absolute; left: 88px; top: 72px; display: flex; align-items: stretch; border-radius: 12px; overflow: hidden; box-shadow: 0 18px 44px rgba(0,0,0,.45); will-change: transform, opacity; }
+    .score { background: var(--accent); color: #111827; font-size: 34px; font-weight: 900; padding: 18px 24px; min-width: 120px; text-align: center; }
+    .card { background: var(--bg); padding: 16px 28px; border: 1px solid rgba(245,158,11,.35); border-left: none; }
+    .title { font-size: 32px; font-weight: 800; color: var(--text); white-space: nowrap; }
+    .subtitle { margin-top: 2px; font-size: 18px; color: var(--subtext); white-space: nowrap; letter-spacing: .03em; }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="wrap" id="lt">
+      <div class="score" id="score">LIVE</div>
+      <div class="card">
+        <div class="title" id="title">Match Update</div>
+        <div class="subtitle" id="subtitle">ffMix Scoreboard Key</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      document.getElementById('title').textContent = params.get('title') || 'Match Update';
+      document.getElementById('subtitle').textContent = params.get('subtitle') || 'ffMix Scoreboard Key';
+      document.getElementById('score').textContent = params.get('eyebrow') || 'LIVE';
+      const accent = params.get('accent') || '#f59e0b';
+      document.documentElement.style.setProperty('--accent', accent);
+      const totalDuration = Math.max(2.0, parseFloat(params.get('duration') || '6.0'));
+      const lt = document.getElementById('lt');
+      const easeOut = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+      const easeIn = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * t; };
+      window.ffmixSeek = function (t) {
+        const inDur = 0.55, outDur = 0.55, outStart = Math.max(inDur, totalDuration - outDur);
+        let opacity = 1, y = 0;
+        if (t < inDur) { const p = easeOut(t / inDur); opacity = p; y = (1 - p) * -30; }
+        else if (t >= outStart) { const p = easeIn((t - outStart) / outDur); opacity = 1 - p; y = p * -30; }
+        lt.style.opacity = opacity.toFixed(4);
+        lt.style.transform = `translate3d(0, ${y.toFixed(2)}px, 0)`;
+      };
+      window.ffmixSeek(0);
+      if (!params.has('manual')) {
+        const start = performance.now();
+        function loop(now) { const elapsed = ((now - start) / 1000) % (totalDuration + 1.0); window.ffmixSeek(Math.min(elapsed, totalDuration)); requestAnimationFrame(loop); }
+        requestAnimationFrame(loop);
+      }
+    })();
+  </script>
+</body>
+</html>

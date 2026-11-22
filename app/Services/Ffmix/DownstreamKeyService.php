@@ -9,35 +9,67 @@ class DownstreamKeyService
 {
     public function ensureSampleTemplate(?string $folder = null): string
     {
+        $templates = $this->ensureSampleTemplates($folder);
+
+        return $templates[0] ?? rtrim($this->resolveFolder($folder), '/').'/sample-lower-third.html';
+    }
+
+    /**
+     * Ensure the default 4 DSK sample templates exist in the target folder.
+     *
+     * @return array<int, string>
+     */
+    public function ensureSampleTemplates(?string $folder = null): array
+    {
         $dir = $this->resolveFolder($folder);
         if (! is_dir($dir)) {
             @mkdir($dir, 0775, true);
         }
 
-        $target = rtrim($dir, '/').'/sample-lower-third.html';
-        $source = resource_path('dsk/sample-lower-third.html');
+        $samples = [
+            'sample-lower-third.html',
+            'sample-breaking-news.html',
+            'sample-interview-tag.html',
+            'sample-scoreboard.html',
+        ];
 
-        if (! is_file($target) && is_file($source)) {
-            copy($source, $target);
+        $paths = [];
+        foreach ($samples as $sample) {
+            $target = rtrim($dir, '/').'/'.$sample;
+            $source = resource_path('dsk/'.$sample);
+
+            if (! is_file($target) && is_file($source)) {
+                @copy($source, $target);
+            }
+
+            if (is_file($target)) {
+                $paths[] = $target;
+            }
         }
 
-        return $target;
+        return $paths;
     }
 
-    /** Discover animated HTML files in the Downstream Key folder. */
+    /** Discover the 4 default animated HTML DSK sample keys. */
     public function listTemplates(?string $folder = null): array
     {
         $dir = $this->resolveFolder($folder);
-        $this->ensureSampleTemplate($dir);
+        $this->ensureSampleTemplates($dir);
 
-        $files = glob(rtrim($dir, '/').'/*.{html,htm}', GLOB_BRACE) ?: [];
-        sort($files);
+        $samples = [
+            'sample-lower-third.html',
+            'sample-breaking-news.html',
+            'sample-interview-tag.html',
+            'sample-scoreboard.html',
+        ];
 
         $templates = [];
-        foreach ($files as $path) {
+        foreach ($samples as $sample) {
+            $path = rtrim($dir, '/').'/'.$sample;
             if (! is_file($path)) {
                 continue;
             }
+
             $content = (string) file_get_contents($path);
             $title = pathinfo($path, PATHINFO_FILENAME);
             if (preg_match('/<title>(.*?)<\/title>/is', $content, $m) === 1) {

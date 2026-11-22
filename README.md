@@ -43,6 +43,7 @@ See [docs/PRD.md](docs/PRD.md) for the complete Product Requirements Document.
 | `9` | **Show/DSK** | Show Name, Watchdog normalization (`w` daemon, `z` scan now), Transitions (`T`), HTML DSK templates |
 
 ### Global Hotkeys
+
 - `t`: Toggle **Dark / Light** theme
 - `S` / `W` / `I` / `E`: **Select** / **Save** / **Import JSON** / **Export JSON** entire Show Presets
 - `w` / `z`: Start/Stop **Background Folder Watchdog** / Run immediate scan & MP4 normalization
@@ -57,6 +58,7 @@ See [docs/PRD.md](docs/PRD.md) for the complete Product Requirements Document.
 All features are also scriptable headlessly via `./ffmix <subcommand>` or `php artisan ffmix:<subcommand>`:
 
 ### 1. Show Presets (Save / Import / Export / Select)
+
 ```bash
 ./ffmix show list
 ./ffmix show select main-broadcast
@@ -66,7 +68,9 @@ All features are also scriptable headlessly via `./ffmix <subcommand>` or `php a
 ```
 
 ### 2. Background Folder Watchdog (Videos + Images/Slates -> Uniform MP4)
+
 Watches the active Show's ingest directory and normalizes every incoming video and image/slate (`.png`, `.jpg`, `.bmp`, `.tiff`, etc.) into uniform H.264 + AAC 48kHz stereo MP4s so transitions and merges never fail due to mismatched codecs, resolutions, frame rates, or missing audio tracks.
+
 ```bash
 ./ffmix watchdog scan             # One-shot scan & normalize
 ./ffmix watchdog start            # Start background daemon (writes PID & logs)
@@ -76,7 +80,9 @@ Watches the active Show's ingest directory and normalizes every incoming video a
 ```
 
 ### 3. Animated HTML Downstream Key (DSK) Lower Thirds
+
 Scans a folder of `.html` overlays (seeded with `resources/dsk/sample-lower-third.html` featuring smooth In/Hold/Out animation and transparent alpha background) and composites them onto video using headless Chrome CDP + FFmpeg ProRes 4444 alpha overlay.
+
 ```bash
 ./ffmix dsk init-sample
 ./ffmix dsk list
@@ -85,13 +91,16 @@ Scans a folder of `.html` overlays (seeded with `resources/dsk/sample-lower-thir
 ```
 
 ### 4. Transitions & Logo Sting
+
 Supports 20 standard `xfade` transitions (`cut`, `fade`, `fadeblack`, `fadewhite`, `wipeleft`, `wiperight`, `wipeup`, `wipedown`, `slideleft`, `slideright`, `slideup`, `slidedown`, `smoothleft`, `smoothright`, `circleopen`, `circleclose`, `radial`, `pixelize`, `dissolve`, `zoomin`) plus **`logo_sting`**.
+
 ```bash
 ./ffmix transition --list
 ./ffmix transition clip1.mp4 clip2.mp4 --transition=logo_sting --duration=1.2 --sting=logo.png --output=stitched.mp4
 ```
 
 ### 5. Transcoding, Probing, Quality & Utilities
+
 ```bash
 ./ffmix probe input.mov --json
 ./ffmix convert input.mov out.mp4 --preset=youtube --lut=teal-and-orange --autocrop --hw

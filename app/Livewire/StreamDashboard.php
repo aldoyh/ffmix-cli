@@ -3,13 +3,14 @@
 namespace App\Livewire;
 
 use App\Models\MediaJob;
+use App\Services\Ffmix\DownstreamKeyService;
 use App\Services\Ffmix\HlsStreamService;
 use App\Services\Ffmix\StreamService;
 use Livewire\Component;
 
 class StreamDashboard extends Component
 {
-    public $streamUrl = '';
+    public $streamUrl = 'https://5c7b683162943.streamlock.net/live/ngrp:bahraintvmain_all/playlist.m3u8';
 
     public $streamType = 'hls';
 
@@ -25,11 +26,11 @@ class StreamDashboard extends Component
 
     public $recordedDuration = 0;
 
-    public $dskTemplate = '';
+    public $dskTemplate = 'sample-lower-third';
 
-    public $dskTitle = '';
+    public $dskTitle = 'ffMix Live Broadcast';
 
-    public $dskSubtitle = '';
+    public $dskSubtitle = 'Normalized 1080p30 Feed • Live Studio';
 
     public $dskAccent = '#06b6d4';
 
@@ -41,20 +42,45 @@ class StreamDashboard extends Component
 
     public $resolutionOptions = [];
 
+    public $dskTemplates = [];
+
     protected HlsStreamService $hls;
 
     protected StreamService $streamService;
+
+    protected DownstreamKeyService $dsk;
 
     public function __construct()
     {
         $this->hls = app(HlsStreamService::class);
         $this->streamService = app(StreamService::class);
+        $this->dsk = app(DownstreamKeyService::class);
     }
 
     public function mount()
     {
         $this->refreshJobStatus();
+        $this->loadDskTemplates();
         $this->loadStreamQualities();
+    }
+
+    public function loadDskTemplates(): void
+    {
+        try {
+            $templates = $this->dsk->listTemplates();
+            $this->dskTemplates = collect($templates)->take(4)->map(static fn (array $template): array => [
+                'value' => pathinfo((string) ($template['filename'] ?? ''), PATHINFO_FILENAME),
+                'filename' => (string) ($template['filename'] ?? ''),
+                'title' => (string) ($template['title'] ?? pathinfo((string) ($template['filename'] ?? ''), PATHINFO_FILENAME)),
+                'description' => (string) ($template['description'] ?? ''),
+            ])->values()->all();
+
+            if ($this->dskTemplate === '' && $this->dskTemplates !== []) {
+                $this->dskTemplate = (string) $this->dskTemplates[0]['value'];
+            }
+        } catch (\Throwable) {
+            $this->dskTemplates = [];
+        }
     }
 
     public function refreshJobStatus()
@@ -175,6 +201,7 @@ class StreamDashboard extends Component
             'recordedOutput' => $this->recordedOutput,
             'recordedDuration' => $this->recordedDuration,
             'dskTemplate' => $this->dskTemplate,
+            'dskTemplates' => $this->dskTemplates,
             'dskTitle' => $this->dskTitle,
             'dskSubtitle' => $this->dskSubtitle,
             'dskAccent' => $this->dskAccent,

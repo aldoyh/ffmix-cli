@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0" />
+  <title>Interview Tag Lower Third</title>
+  <meta name="dsk-description" content="Clean interview guest tag with accent bar and smooth slide animation" />
+  <style>
+    :root { --accent: #22c55e; --bg: rgba(17, 24, 39, 0.88); --text: #f9fafb; --subtext: #d1d5db; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 1920px; height: 1080px; background: transparent !important; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif; }
+    .stage { position: relative; width: 100%; height: 100%; }
+    .wrap { position: absolute; left: 96px; bottom: 92px; display: flex; gap: 14px; align-items: center; will-change: transform, opacity; }
+    .dot { width: 14px; height: 14px; border-radius: 999px; background: var(--accent); box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 60%, transparent); }
+    .card { background: var(--bg); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; padding: 18px 28px; backdrop-filter: blur(10px); box-shadow: 0 18px 44px rgba(0,0,0,.4); }
+    .eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+    .title { font-size: 34px; font-weight: 800; color: var(--text); white-space: nowrap; }
+    .subtitle { margin-top: 3px; font-size: 19px; color: var(--subtext); white-space: nowrap; }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="wrap" id="lt">
+      <div class="dot"></div>
+      <div class="card">
+        <div class="eyebrow" id="eyebrow">GUEST</div>
+        <div class="title" id="title">Guest Name</div>
+        <div class="subtitle" id="subtitle">Role / Organization</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      document.getElementById('title').textContent = params.get('title') || 'Guest Name';
+      document.getElementById('subtitle').textContent = params.get('subtitle') || 'Role / Organization';
+      document.getElementById('eyebrow').textContent = params.get('eyebrow') || 'GUEST';
+      const accent = params.get('accent') || '#22c55e';
+      document.documentElement.style.setProperty('--accent', accent);
+      const totalDuration = Math.max(2.0, parseFloat(params.get('duration') || '6.0'));
+      const lt = document.getElementById('lt');
+      const easeOut = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+      const easeIn = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * t; };
+      window.ffmixSeek = function (t) {
+        const inDur = 0.7, outDur = 0.7, outStart = Math.max(inDur, totalDuration - outDur);
+        let opacity = 1, x = 0;
+        if (t < inDur) { const p = easeOut(t / inDur); opacity = p; x = (1 - p) * -60; }
+        else if (t >= outStart) { const p = easeIn((t - outStart) / outDur); opacity = 1 - p; x = p * -60; }
+        lt.style.opacity = opacity.toFixed(4);
+        lt.style.transform = `translate3d(${x.toFixed(2)}px, 0, 0)`;
+      };
+      window.ffmixSeek(0);
+      if (!params.has('manual')) {
+        const start = performance.now();
+        function loop(now) { const elapsed = ((now - start) / 1000) % (totalDuration + 1.0); window.ffmixSeek(Math.min(elapsed, totalDuration)); requestAnimationFrame(loop); }
+        requestAnimationFrame(loop);
+      }
+    })();
+  </script>
+</body>
+</html>

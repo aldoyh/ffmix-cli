@@ -63,9 +63,13 @@
             <div>
                 <label class="block text-sm font-medium text-neutral-600 dark:text-neutral-300 mb-1">Template</label>
                 <select wire:model="dskTemplate" class="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
-                    <option value="">None</option>
-                    <option value="sample-lower-third">Sample Lower Third</option>
+                    @forelse ($dskTemplates as $template)
+                        <option value="{{ $template['value'] }}">{{ $template['title'] }}</option>
+                    @empty
+                        <option value="sample-lower-third">Sample Lower Third</option>
+                    @endforelse
                 </select>
+                <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">4 DSK samples available; active key: {{ $dskTemplate }}</p>
             </div>
             <div class="grid grid-cols-2 gap-4">
                 <div>
