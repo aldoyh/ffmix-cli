@@ -3,12 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Models\MediaJob;
-use App\Services\Ffmix\HlsStreamService;
 use App\Services\Ffmix\DownstreamKeyService;
+use App\Services\Ffmix\HlsStreamService;
 use App\Services\Ffmix\StreamService;
-use App\Models\ShowPreset;
 use Illuminate\Console\Command;
-use RuntimeException;
 
 class FfmixStreamCommand extends Command
 {
@@ -233,10 +231,10 @@ class FfmixStreamCommand extends Command
         if (count($qualities) > 0) {
             $info = $hls->probeMediaStream($qualities[0]['url'] ?? $streamUrl, 15);
             $this->info('Selected quality info:');
-            $this->info("  Codec: ".$info['codec']??'unknown');
-            $this->info("  Resolution: ".($info['width']??'x').'x'.($info['height']??'unknown'));
-            $this->info("  Frame Rate: ".$info['frame_rate']);
-            $this->info("  Duration: ".($info['duration']??'unknown').' seconds');
+            $this->info('  Codec: '.$info['codec'] ?? 'unknown');
+            $this->info('  Resolution: '.($info['width'] ?? 'x').'x'.($info['height'] ?? 'unknown'));
+            $this->info('  Frame Rate: '.$info['frame_rate']);
+            $this->info('  Duration: '.($info['duration'] ?? 'unknown').' seconds');
         }
 
         return self::SUCCESS;

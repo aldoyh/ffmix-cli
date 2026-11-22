@@ -1,7 +1,5 @@
 <?php
 
-use App\Models\MediaJob;
-use App\Services\Ffmix\DownstreamKeyService;
 use App\Services\Ffmix\HlsStreamService;
 use App\Services\Ffmix\StreamService;
 use Illuminate\Support\Facades\Process;
@@ -114,8 +112,12 @@ it('records a real HLS stream and applies DSK overlay from CLI', function (): vo
     $videoStream = null;
     $audioStream = null;
     foreach ($streams as $s) {
-        if ($s['codec_type'] ?? null === 'video') { $videoStream = $s; }
-        if ($s['codec_type'] ?? null === 'audio') { $audioStream = $s; }
+        if ($s['codec_type'] ?? null === 'video') {
+            $videoStream = $s;
+        }
+        if ($s['codec_type'] ?? null === 'audio') {
+            $audioStream = $s;
+        }
     }
 
     expect($videoStream)->not->toBeNull()
