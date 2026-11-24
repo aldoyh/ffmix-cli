@@ -22,9 +22,34 @@ See [docs/PRD.md](docs/PRD.md) for the complete Product Requirements Document.
 ./ffmix --demo
 ./ffmix --theme=light
 
+# Normal launches also start the local welcome server and open the FaceTime multiview
+./ffmix --browser-port=8000
+
+# Disable automatic browser/server launch
+./ffmix --no-browser
+
+# Services start in the background and recover without blocking TUI or streaming
+# Watchdog auto-start follows the active Show Preset; Web/Watchdog/Stream status
+# is kept in the fixed footer, with runtime errors shown alongside it
+
 # Render a non-interactive snapshot of any tab
 ./ffmix --snapshot --tab=show --demo
 ```
+
+### Sample Media
+
+The stream dashboard discovers every supported video and audio file under `~/Movies` and adds two live HLS sources:
+
+- Bahrain - Manama
+- Ours. Yours. Bahrain
+- Bahrain Folklore Music 1
+- Bahrain Folklore Music 2
+- Bahrain National Anthem
+- Saeed Sample Enhanced
+- Bahrain TV Live
+- Radio 98.4 Live
+
+Use the Sample Media selector in `http://127.0.0.1:8000/stream` to probe or record a sample. The recording runs as a background CLI process, while the fixed footer reports Web, Watchdog, and Stream status.
 
 ---
 

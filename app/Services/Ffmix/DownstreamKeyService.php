@@ -125,21 +125,6 @@ class DownstreamKeyService
         mkdir($framesDir, 0775, true);
 
         try {
-            $renderResult = Process::timeout(300)->run([
-                $chromeBin,
-                '--headless=new',
-                '--disable-gpu',
-                '--no-sandbox',
-                '--hide-scrollbars',
-                '--window-size='.$width.','.$height,
-                '--remote-debugging-port='.(4000 + mt_rand(0, 999)),
-                'about:blank',
-            ]);
-
-            if (! $renderResult->successful()) {
-                throw new RuntimeException('Chrome launch failed: '.trim($renderResult->errorOutput() ?: $renderResult->output()));
-            }
-
             // Use the Node.js render script with CDP
             $renderResult = Process::timeout(300)->run([
                 'node',
@@ -153,6 +138,7 @@ class DownstreamKeyService
                 '--title='.$title,
                 '--subtitle='.$subtitle,
                 '--accent='.$accent,
+                '--chrome='.$chromeBin,
             ]);
 
             if (! $renderResult->successful()) {

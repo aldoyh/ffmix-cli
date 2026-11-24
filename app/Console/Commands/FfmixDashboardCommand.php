@@ -12,6 +12,7 @@ use App\Models\Preset;
 use App\Services\Ffmix\DownstreamKeyService;
 use App\Services\Ffmix\FfmpegCommandBuilder;
 use App\Services\Ffmix\FfmpegEnvironmentService;
+use App\Services\Ffmix\FolderWatchdogService;
 use App\Services\Ffmix\PipelineConfig;
 use App\Services\Ffmix\ShowPresetService;
 use App\Tui\Ansi;
@@ -20,7 +21,9 @@ use App\Tui\DashboardRenderer;
 use App\Tui\DashboardState;
 use App\Tui\TerminalScreen;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Process\Process;
 
 class FfmixDashboardCommand extends Command
 {
@@ -35,7 +38,11 @@ class FfmixDashboardCommand extends Command
         {--snapshot : Render a single TUI frame and exit without raw TTY mode}
         {--demo : Seed demo queue jobs, drop zones, and analyzer telemetry if empty}
         {--width=124 : Snapshot width in columns}
-        {--height=36 : Snapshot height in rows}';
+        {--height=36 : Snapshot height in rows}
+        {--no-browser : Do not start or open the local web welcome page}
+        {--browser-url= : Open a specific web URL instead of starting the local server}
+        {--browser-host=127.0.0.1 : Local web server host}
+        {--browser-port=8000 : Local web server port}';
 
     /**
      * The console command description.
@@ -51,6 +58,7 @@ class FfmixDashboardCommand extends Command
         FfmpegCommandBuilder $builder,
         ShowPresetService $showPresets,
         DownstreamKeyService $dsk,
+        FolderWatchdogService $watchdog,
     ): int {
         Preset::syncBuiltins();
         $activeShow = $showPresets->active();
@@ -65,7 +73,12 @@ class FfmixDashboardCommand extends Command
         $state = new DashboardState($theme);
         $state->tab = $tab;
         $state->applyShowPreset($activeShow);
-        $dsk->ensureSampleTemplate($state->dskFolder);
+        try {
+            $dsk->ensureSampleTemplate($state->dskFolder);
+        } catch (\Throwable $e) {
+            $this->recordRuntimeError('DSK', $e->getMessage());
+            $this->warn('DSK setup was skipped: '.$e->getMessage());
+        }
 
         if ((bool) $this->option('snapshot') || ! $this->input->isInteractive()) {
             $state->environment = $environment->inspect();
@@ -78,9 +91,84 @@ class FfmixDashboardCommand extends Command
             return self::SUCCESS;
         }
 
+        $watchdogEnabled = (bool) data_get($activeShow->config, 'watchdog.enabled', false);
+        if ($watchdogEnabled) {
+            try {
+                $interval = max(1, (int) data_get($activeShow->config, 'watchdog.poll_seconds', 3));
+                $pid = $watchdog->startBackgroundDaemon($interval);
+                if ($pid <= 0) {
+                    $this->recordRuntimeError('Watchdog', 'The background watchdog could not be started.');
+                }
+            } catch (\Throwable $e) {
+                $this->recordRuntimeError('Watchdog', $e->getMessage());
+                $this->warn('Watchdog startup was skipped: '.$e->getMessage());
+            }
+        }
+
+        $webServer = null;
+        if (! (bool) $this->option('no-browser')) {
+            $webServer = $this->launchBrowser();
+        }
+
         $controller->run($state, new TerminalScreen);
 
         return self::SUCCESS;
+    }
+
+    private function launchBrowser(): ?Process
+    {
+        $browserUrl = trim((string) $this->option('browser-url'));
+        $webServer = null;
+
+        if ($browserUrl === '') {
+            $host = trim((string) $this->option('browser-host')) ?: '127.0.0.1';
+            $port = max(1, min(65535, (int) $this->option('browser-port')));
+            $browserUrl = "http://{$host}:{$port}/";
+
+            try {
+                $webServer = new Process(
+                    [PHP_BINARY, base_path('artisan'), 'serve', '--host='.$host, '--port='.$port],
+                    base_path(),
+                );
+                $webServer->setTimeout(null);
+                $webServer->start();
+            } catch (\Throwable $e) {
+                $this->recordRuntimeError('Web server', $e->getMessage());
+                $this->warn('Web server startup was skipped: '.$e->getMessage());
+            }
+        }
+
+        $browser = match (PHP_OS_FAMILY) {
+            'Darwin' => ['open', $browserUrl],
+            'Windows' => ['cmd', '/c', 'start', '', $browserUrl],
+            default => ['xdg-open', $browserUrl],
+        };
+
+        try {
+            $browserProcess = new Process($browser, base_path());
+            $browserProcess->setTimeout(5);
+            $browserProcess->start();
+        } catch (\Throwable $e) {
+            $this->recordRuntimeError('Browser', $e->getMessage());
+            $this->warn('Browser launch was skipped: '.$e->getMessage());
+        }
+
+        $this->line("Browser: {$browserUrl}");
+
+        return $webServer;
+    }
+
+    private function recordRuntimeError(string $service, string $message): void
+    {
+        $errors = Cache::get('ffmix.runtime_errors', []);
+        $errors = is_array($errors) ? $errors : [];
+        $errors[] = [
+            'service' => $service,
+            'message' => $message,
+            'time' => now()->toIso8601String(),
+        ];
+
+        Cache::put('ffmix.runtime_errors', array_slice($errors, -10), now()->addHours(6));
     }
 
     private function seedDemoData(FfmpegCommandBuilder $builder): void

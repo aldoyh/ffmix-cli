@@ -5,6 +5,7 @@ namespace App\Livewire;
 use App\Models\MediaJob;
 use App\Services\Ffmix\DownstreamKeyService;
 use App\Services\Ffmix\HlsStreamService;
+use App\Services\Ffmix\MediaSampleService;
 use App\Services\Ffmix\StreamService;
 use Livewire\Component;
 
@@ -44,6 +45,10 @@ class StreamDashboard extends Component
 
     public $dskTemplates = [];
 
+    public $sampleSources = [];
+
+    public $selectedSample = '';
+
     protected HlsStreamService $hls;
 
     protected StreamService $streamService;
@@ -61,6 +66,27 @@ class StreamDashboard extends Component
     {
         $this->refreshJobStatus();
         $this->loadDskTemplates();
+        $this->loadSampleSources();
+        $this->loadStreamQualities();
+    }
+
+    public function loadSampleSources(): void
+    {
+        $this->sampleSources = app(MediaSampleService::class)->all();
+    }
+
+    public function selectSample(string $source): void
+    {
+        $sample = collect($this->sampleSources)->firstWhere('source', $source);
+        if (! is_array($sample)) {
+            $this->dispatch('error', title: 'Sample Media', message: 'The selected sample is no longer available.');
+
+            return;
+        }
+
+        $this->selectedSample = $source;
+        $this->streamUrl = $source;
+        $this->streamType = in_array($sample['kind'], ['hls', 'audio-hls'], true) ? 'hls' : 'file';
         $this->loadStreamQualities();
     }
 
@@ -78,8 +104,9 @@ class StreamDashboard extends Component
             if ($this->dskTemplate === '' && $this->dskTemplates !== []) {
                 $this->dskTemplate = (string) $this->dskTemplates[0]['value'];
             }
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
             $this->dskTemplates = [];
+            $this->dispatch('error', title: 'DSK Templates', message: $e->getMessage());
         }
     }
 
@@ -104,8 +131,39 @@ class StreamDashboard extends Component
             return;
         }
 
+        if (is_file($this->streamUrl)) {
+            try {
+                $info = $this->hls->probeMediaStream($this->streamUrl, 15);
+                $resolution = ($info['width'] ?? null) && ($info['height'] ?? null)
+                    ? $info['width'].'x'.$info['height']
+                    : 'Audio';
+                $codec = $info['codec'] ?? $info['audio_codec'] ?? 'source';
+                $this->availableQualities = [[
+                    'bandwidth' => 0,
+                    'resolution' => $resolution,
+                    'codec' => $codec,
+                    'url' => $this->streamUrl,
+                ]];
+                $this->resolutionOptions = [[
+                    'index' => 1,
+                    'label' => 'Source: '.$resolution.' ('.$codec.')',
+                    'bandwidth' => 0,
+                    'resolution' => $resolution,
+                    'url' => $this->streamUrl,
+                    'isMaster' => true,
+                ]];
+                $this->selectedResolution = 1;
+            } catch (\Exception $e) {
+                $this->availableQualities = [];
+                $this->resolutionOptions = [];
+                $this->dispatch('error', title: 'Local Media Probe Failed', message: $e->getMessage());
+            }
+
+            return;
+        }
+
         try {
-            $qualities = $this->hls->probeStreamQualities($this->streamUrl, 15);
+            $qualities = $this->streamService->probeStreamQualities($this->streamUrl, 15);
             $this->availableQualities = $qualities['qualities'] ?? [];
 
             // Build resolution options for the UI
@@ -145,29 +203,51 @@ class StreamDashboard extends Component
             return;
         }
 
-        // Ensure qualities are loaded
         if (empty($this->availableQualities)) {
             $this->loadStreamQualities();
         }
 
-        $this->recordingActive = true;
-        $this->status = 'running';
-
-        // Determine output path with timestamp
         $outputFileName = 'ffmix_web_'.date('Ymd_His').'.mp4';
         $outputPath = sys_get_temp_dir().'/'.$outputFileName;
+        $job = $this->streamService->createJob('stream_'.uniqid(), $this->streamUrl, [
+            'stream_url' => $this->streamUrl,
+            'stream_type' => $this->streamType,
+            'output_path' => $outputPath,
+            'record_seconds' => 30,
+            'resolution_index' => $this->selectedResolution,
+        ]);
+        $job = $this->streamService->markJobStarted($job);
 
-        // Launch recording in background
-        $this->dispatch(
-            'start-recording',
-            streamUrl: $this->streamUrl,
-            outputPath: $outputPath,
-            seconds: 30,
-            resolution: $this->selectedResolution,
+        $logFile = storage_path('logs/ffmix-web-record-'.$job->id.'.log');
+        $command = sprintf(
+            'nohup %s %s ffmix:stream record --stream-url=%s --seconds=30 --resolution=%d --output=%s --job-id=%d > %s 2>&1 & echo $!',
+            escapeshellarg(PHP_BINARY),
+            escapeshellarg(base_path('artisan')),
+            escapeshellarg($this->streamUrl),
+            max(0, (int) $this->selectedResolution),
+            escapeshellarg($outputPath),
+            $job->id,
+            escapeshellarg($logFile),
         );
+        $pid = (int) trim((string) shell_exec($command));
 
-        // Refresh status after short delay
-        $this->refreshAfter(2000);
+        if ($pid <= 0) {
+            $this->streamService->markJobFailed($job, 'The background recording process could not be started.');
+            $this->recordingActive = false;
+            $this->status = 'failed';
+            $this->dispatch('error', title: 'Recording Start Failed', message: 'The background recording process could not be started.');
+
+            return;
+        }
+
+        $pipelineConfig = $job->pipeline_config;
+        $pipelineConfig['record_pid'] = $pid;
+        $pipelineConfig['record_log'] = $logFile;
+        $job->update(['pipeline_config' => $pipelineConfig]);
+
+        $this->recordingActive = true;
+        $this->status = 'running';
+        $this->dispatch('start-recording', streamUrl: $this->streamUrl, outputPath: $outputPath, seconds: 30, resolution: $this->selectedResolution);
     }
 
     public function stopRecording()
@@ -209,6 +289,8 @@ class StreamDashboard extends Component
             'selectedResolution' => $this->selectedResolution,
             'resolutionOptions' => $this->resolutionOptions,
             'availableQualities' => $this->availableQualities,
+            'sampleSources' => $this->sampleSources,
+            'selectedSample' => $this->selectedSample,
         ]);
     }
 

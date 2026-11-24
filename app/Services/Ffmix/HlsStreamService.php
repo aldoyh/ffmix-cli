@@ -151,6 +151,37 @@ class HlsStreamService
     {
         $ffmpegBin = (string) config('ffmix.binaries.ffmpeg', 'ffmpeg');
 
+        if (is_file($streamUrl)) {
+            $extension = strtolower(pathinfo($streamUrl, PATHINFO_EXTENSION));
+            $audioOnly = in_array($extension, ['aac', 'aiff', 'flac', 'm4a', 'mp3', 'wav'], true);
+
+            if ($audioOnly) {
+                return [
+                    $ffmpegBin,
+                    '-hide_banner', '-y',
+                    '-i', $streamUrl,
+                    '-vn',
+                    '-c:a', 'aac',
+                    '-b:a', '192k',
+                    '-t', (string) $recordSeconds,
+                    '-movflags', '+faststart',
+                    $outputPath,
+                ];
+            }
+
+            return [
+                $ffmpegBin,
+                '-hide_banner', '-y',
+                '-re',
+                '-i', $streamUrl,
+                '-c:v', 'copy',
+                '-c:a', 'copy',
+                '-t', (string) $recordSeconds,
+                '-movflags', '+faststart',
+                $outputPath,
+            ];
+        }
+
         $inputUrl = $streamUrl;
         if ($resolutionIndex !== null && $resolutionIndex > 0) {
             $playlist = $this->probePlaylist($streamUrl, 15);

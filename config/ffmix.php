@@ -13,6 +13,55 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Sample Media Catalog
+    |--------------------------------------------------------------------------
+    */
+    'sample_media_root' => env('FFMIX_SAMPLE_MEDIA_ROOT', rtrim((string) getenv('HOME'), '/').'/Movies'),
+    'sample_media' => [
+        [
+            'label' => 'Bahrain - Manama',
+            'path' => 'Bahrain - Manama [vPwtOiUXxTw].mp4',
+            'kind' => 'video',
+        ],
+        [
+            'label' => 'Ours. Yours. Bahrain',
+            'path' => 'Ours. Yours. Bahrain [15BefRzSQ6I].mp4',
+            'kind' => 'video',
+        ],
+        [
+            'label' => 'Bahrain Folklore Music 1',
+            'path' => 'BahrainFolkloreMusic1.mp3',
+            'kind' => 'audio',
+        ],
+        [
+            'label' => 'Bahrain Folklore Music 2',
+            'path' => 'BahrainFolkloreMusic2.mp3',
+            'kind' => 'audio',
+        ],
+        [
+            'label' => 'Bahrain National Anthem',
+            'path' => 'Bahrain_National_Anthem_2023.mp3',
+            'kind' => 'audio',
+        ],
+        [
+            'label' => 'Saeed Sample Enhanced',
+            'path' => 'SaeedSample-enhanced-v2.wav',
+            'kind' => 'audio',
+        ],
+        [
+            'label' => 'Bahrain TV Live',
+            'url' => 'https://5c7b683162943.streamlock.net/live/ngrp:bahraintvmain_all/playlist.m3u8',
+            'kind' => 'hls',
+        ],
+        [
+            'label' => 'Radio 98.4 Live',
+            'url' => 'https://5c7b683162943.streamlock.net/live/ngrp:radio-98-4_all/chunklist_w1027272218_b981072.m3u8',
+            'kind' => 'audio-hls',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Concurrency & TUI Defaults
     |--------------------------------------------------------------------------
     */

@@ -3,6 +3,15 @@
     <div class="stream-config rounded-xl bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 p-6 shadow-sm">
         <h2 class="text-lg font-semibold text-neutral-900 dark:text-white mb-4">Stream Configuration</h2>
         <div class="space-y-4">
+        <div>
+            <label class="block text-sm font-medium text-neutral-600 dark:text-neutral-300 mb-1">Sample Media</label>
+            <select wire:model="selectedSample" wire:change="selectSample($event.target.value)" class="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
+                <option value="">Choose a local or live sample ({{ count($sampleSources) }} available)</option>
+                @foreach ($sampleSources as $sample)
+                    <option value="{{ $sample['source'] }}">{{ $sample['label'] }} · {{ strtoupper($sample['kind']) }}</option>
+                @endforeach
+            </select>
+        </div>
             <div>
                 <label class="block text-sm font-medium text-neutral-600 dark:text-neutral-300 mb-1">Stream URL</label>
                 <input type="text" wire:model="streamUrl" class="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-primary" placeholder="https://example.com/live/stream.m3u8" />
@@ -16,6 +25,7 @@
                 <label class="block text-sm font-medium text-neutral-600 dark:text-neutral-300 mb-1">Stream Type</label>
                 <select wire:model="streamType" class="w-full rounded-lg border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-700 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
                     <option value="hls">HLS</option>
+                    <option value="file">Local File</option>
                     <option value="rtmp">RTMP</option>
                 </select>
             </div>
@@ -31,7 +41,10 @@
                 </select>
                 @if (count($availableQualities) > 0)
                     <p class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                        Available qualities: @foreach ($availableQualities as $q) {{ $q['resolution'] ?? 'Source' }}{@unless ($loop->last), } @endforeach
+                        Available qualities:
+                        @foreach ($availableQualities as $q)
+                            {{ $q['resolution'] ?? 'Source' }}@unless ($loop->last), @endunless
+                        @endforeach
                     </p>
                 @endif
             </div>

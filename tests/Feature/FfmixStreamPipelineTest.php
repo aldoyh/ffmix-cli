@@ -56,6 +56,35 @@ it('records a real HLS stream to MP4 without overlay from CLI', function (): voi
     @rmdir($tmpDir);
 });
 
+it('keeps an HLS recording successful when DSK rendering fails', function (): void {
+    $ffmpeg = (string) config('ffmix.binaries.ffmpeg', 'ffmpeg');
+    if (! Process::run([$ffmpeg, '-version'])->successful()) {
+        $this->markTestSkipped('ffmpeg binary not available.');
+    }
+
+    $tmpDir = sys_get_temp_dir().'/ffmix_stream_dsk_fallback_'.uniqid();
+    mkdir($tmpDir, 0775, true);
+    $outputPath = $tmpDir.'/live_raw_fallback.mp4';
+
+    $stream = app(StreamService::class);
+    $result = $stream->runStreamRecord([
+        'stream_url' => STREAM_PLAYLIST_URL,
+        'output_path' => $outputPath,
+        'record_seconds' => 3,
+        'resolution_index' => null,
+        'dsk' => [
+            'template_path' => $tmpDir.'/missing-template.html',
+        ],
+    ]);
+
+    expect(is_file($result['output_path']))->toBeTrue()
+        ->and($result['dsk_frames'])->toBe(0)
+        ->and($result['dsk_error'])->toContain('template');
+
+    @unlink($outputPath);
+    @rmdir($tmpDir);
+});
+
 it('records a real HLS stream and applies DSK overlay from CLI', function (): void {
     $ffmpeg = (string) config('ffmix.binaries.ffmpeg', 'ffmpeg');
     $node = 'node';

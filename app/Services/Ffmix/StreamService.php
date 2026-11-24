@@ -3,6 +3,7 @@
 namespace App\Services\Ffmix;
 
 use App\Models\MediaJob;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Process;
 use RuntimeException;
 use Throwable;
@@ -81,7 +82,9 @@ class StreamService
         int $recordSeconds = 60,
         ?int $resolutionIndex = null,
     ): array {
-        $hlsArgs = $this->hls->buildRecordCommand($streamUrl, $outputPath, $resolutionIndex, $recordSeconds);
+        if (is_file($streamUrl)) {
+            return $this->hls->buildRecordCommand($streamUrl, $outputPath, $resolutionIndex, $recordSeconds);
+        }
 
         // Extract input URL from built args
         $inputUrl = $streamUrl;
@@ -189,14 +192,27 @@ class StreamService
 
         // Apply DSK overlay if configured
         if (! empty($dskConfig) && isset($dskConfig['template_path'])) {
-            $final = $this->applyDskToStream($tmpVideo, $outputPath, $dskConfig);
-            @unlink($tmpVideo);
+            try {
+                $final = $this->applyDskToStream($tmpVideo, $outputPath, $dskConfig);
+                @unlink($tmpVideo);
 
-            return [
-                'output_path' => $final['output_path'],
-                'duration' => $recordSeconds,
-                'dsk_frames' => $final['dsk_frames'] ?? 0,
-            ];
+                return [
+                    'output_path' => $final['output_path'],
+                    'duration' => $recordSeconds,
+                    'dsk_frames' => $final['dsk_frames'] ?? 0,
+                ];
+            } catch (Throwable $e) {
+                $this->recordRuntimeError('DSK', $e->getMessage());
+                @unlink($outputPath);
+                @rename($tmpVideo, $outputPath);
+
+                return [
+                    'output_path' => $outputPath,
+                    'duration' => $recordSeconds,
+                    'dsk_frames' => 0,
+                    'dsk_error' => $e->getMessage(),
+                ];
+            }
         }
 
         @rename($tmpVideo, $outputPath);
@@ -311,18 +327,35 @@ class StreamService
 
             // Apply DSK overlay if configured
             if (! empty($dskConfig) && isset($dskConfig['template_path'])) {
-                $final = $this->applyDskToStream($tmpVideo, $outputPath, $dskConfig);
-                @unlink($tmpVideo);
+                try {
+                    $final = $this->applyDskToStream($tmpVideo, $outputPath, $dskConfig);
+                    @unlink($tmpVideo);
 
-                $job = $this->markJobFinished($job, $final['output_path']);
+                    $job = $this->markJobFinished($job, $final['output_path']);
 
-                return [
-                    'output_path' => $final['output_path'],
-                    'duration' => $recordSeconds,
-                    'dsk_frames' => $final['dsk_frames'] ?? 0,
-                    'job_id' => $job->id,
-                    'job_status' => $job->status->value,
-                ];
+                    return [
+                        'output_path' => $final['output_path'],
+                        'duration' => $recordSeconds,
+                        'dsk_frames' => $final['dsk_frames'] ?? 0,
+                        'job_id' => $job->id,
+                        'job_status' => $job->status->value,
+                    ];
+                } catch (Throwable $e) {
+                    $this->recordRuntimeError('DSK', $e->getMessage());
+                    @unlink($outputPath);
+                    @rename($tmpVideo, $outputPath);
+
+                    $job = $this->markJobFinished($job, $outputPath);
+
+                    return [
+                        'output_path' => $outputPath,
+                        'duration' => $recordSeconds,
+                        'dsk_frames' => 0,
+                        'dsk_error' => $e->getMessage(),
+                        'job_id' => $job->id,
+                        'job_status' => $job->status->value,
+                    ];
+                }
             }
 
             @rename($tmpVideo, $outputPath);
@@ -347,5 +380,18 @@ class StreamService
             }
             throw $e;
         }
+    }
+
+    private function recordRuntimeError(string $service, string $message): void
+    {
+        $errors = Cache::get('ffmix.runtime_errors', []);
+        $errors = is_array($errors) ? $errors : [];
+        $errors[] = [
+            'service' => $service,
+            'message' => $message,
+            'time' => now()->toIso8601String(),
+        ];
+
+        Cache::put('ffmix.runtime_errors', array_slice($errors, -10), now()->addHours(6));
     }
 }

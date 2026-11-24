@@ -13,6 +13,7 @@
     <body>
         {{ $slot }}
 
+        @include('components.system-footer')
         @livewireScripts
     </body>
 </html>
