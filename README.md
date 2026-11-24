@@ -18,6 +18,7 @@ See [docs/PRD.md](docs/PRD.md) for the complete Product Requirements Document.
 
 ```bash
 # Launch the interactive TUI Dashboard (with optional demo data or light theme)
+# ./ffmix opens the Vision/Audio Mixer view by default
 ./ffmix
 ./ffmix --demo
 ./ffmix --theme=light
@@ -65,9 +66,26 @@ Use the Sample Media selector in `http://127.0.0.1:8000/stream` to probe or reco
 | `6` | **Tools** | Contact Sheet creator, Merge Media (`passthru`/`complex`), Transitions + Logo Sting (`T`), Movie <-> Images |
 | `7` | **DropZones** | Unlimited watch-folder Drop Zones (`n` create, `s` scan, `Space` toggle) |
 | `8` | **Monitor** | Live FFmpeg worker output log tail + `ffprobe` stream inspector (`i`) |
-| `9` | **Show/DSK** | Show Name, Watchdog normalization (`w` daemon, `z` scan now), Transitions (`T`), HTML DSK templates |
+| `9` | **Mixer/DSK** | Default vision/audio mixer: PVW/PGM, source bank, 4 audio channels, overlay keys, HLS stream, continuous record, and macros |
 
 ### Global Hotkeys
+
+#### Mixer / DSK Hotkeys
+
+- `1`–`4`: Select the **PVW** source
+- `Enter`: **CUT** PVW to PGM
+- `Space`: **AUTO** transition PVW to PGM
+- `F1`–`F4`: Toggle Lower Third, Title Card, Logo, and Ticker overlay keys
+- `F5`: Start/Stop continuous local HLS output from PGM
+- `F6`: Start/Stop continuous MP4 recording from PGM
+- `Up` / `Down`: Select an audio channel
+- `Left` / `Right` or `-` / `+`: Adjust the selected channel level
+- `u` / `i` / `o` / `p`: Mute/unmute Main 1, Main 2, Mic 1, and Mic 2
+- `M`: Start/stop macro recording
+- `N`: Name the macro sequence
+- `A`: Manually add a macro action
+- `X`: Execute the current macro
+- `L`: Load a saved macro
 
 - `t`: Toggle **Dark / Light** theme
 - `S` / `W` / `I` / `E`: **Select** / **Save** / **Import JSON** / **Export JSON** entire Show Presets

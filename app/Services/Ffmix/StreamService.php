@@ -75,6 +75,104 @@ class StreamService
         return MediaJob::query()->where('session_key', $sessionKey)->first();
     }
 
+    /** Build a continuous live-HLS output command for Mixer transport controls. */
+    public function buildLiveStreamArgs(string $sourcePath, string $outputDir): array
+    {
+        if (! is_dir($outputDir)) {
+            mkdir($outputDir, 0775, true);
+        }
+
+        $audioOnly = str_starts_with($sourcePath, 'http')
+            ? str_contains($sourcePath, 'radio-98-4') || str_contains($sourcePath, 'chunklist')
+            : in_array(strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION)), ['mp3', 'm4a', 'wav', 'flac', 'aac', 'aiff'], true);
+
+        if ($audioOnly) {
+            $ffmpegBin = (string) config('ffmix.binaries.ffmpeg', 'ffmpeg');
+
+            return [
+                $ffmpegBin,
+                '-hide_banner',
+                '-y',
+                '-re',
+                '-i',
+                $sourcePath,
+                '-vn',
+                '-c:a',
+                'aac',
+                '-b:a',
+                '128k',
+                '-f',
+                'hls',
+                '-hls_segment_duration',
+                '4',
+                '-hls_list_size',
+                '10',
+                '-hls_flags',
+                'delete_segments',
+                $outputDir.'/stream.m3u8',
+            ];
+        }
+
+        return $this->buildHlsLiveArgs($sourcePath, $outputDir);
+    }
+
+    /** Build a continuous record command for Mixer transport controls. */
+    public function buildLiveRecordArgs(string $sourcePath, string $outputPath): array
+    {
+        $ffmpegBin = (string) config('ffmix.binaries.ffmpeg', 'ffmpeg');
+
+        if (is_file($sourcePath)) {
+            $args = [
+                $ffmpegBin,
+                '-hide_banner',
+                '-y',
+                '-re',
+                '-i',
+                $sourcePath,
+                '-movflags',
+                '+faststart',
+            ];
+
+            $extension = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION));
+            if (in_array($extension, ['mp3', 'm4a', 'wav', 'flac', 'aac', 'aiff'], true)) {
+                $args = array_merge($args, ['-vn', '-c:a', 'aac', '-b:a', '192k']);
+            } else {
+                $args = array_merge($args, ['-c:v', 'copy', '-c:a', 'copy']);
+            }
+
+            $args[] = $outputPath;
+
+            return $args;
+        }
+
+        $audioOnly = str_contains($sourcePath, 'radio-98-4') || str_contains($sourcePath, 'chunklist');
+
+        $args = [
+            $ffmpegBin,
+            '-hide_banner',
+            '-y',
+            '-fflags',
+            '+genpts',
+            '-rw_timeout',
+            '10000000',
+            '-timeout',
+            '15000000',
+            '-re',
+            '-i',
+            $sourcePath,
+        ];
+
+        if ($audioOnly) {
+            $args = array_merge($args, ['-vn', '-c:a', 'aac', '-b:a', '128k']);
+        } else {
+            $args = array_merge($args, ['-c:v', 'copy', '-c:a', 'copy']);
+        }
+
+        $args = array_merge($args, ['-movflags', '+faststart', $outputPath]);
+
+        return $args;
+    }
+
     /** Build FFmpeg arguments to record an HLS stream to MP4 (direct remux). */
     public function buildRecordStreamArgs(
         string $streamUrl,

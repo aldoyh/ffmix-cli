@@ -40,7 +40,7 @@ enum DashboardTab: string
             self::Tools => 'Tools',
             self::DropZones => 'DropZone',
             self::Monitor => 'Monitor',
-            self::Show => 'Show/DSK',
+            self::Show => 'Mixer/DSK',
         };
     }
 

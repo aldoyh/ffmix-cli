@@ -33,7 +33,7 @@ class FfmixDashboardCommand extends Command
      * @var string
      */
     protected $signature = 'ffmix
-        {--tab=queue : Initial tab (queue|studio|fx|audio|analyzer|tools|dropzones|monitor|show)}
+        {--tab=show : Initial tab (queue|studio|fx|audio|analyzer|tools|dropzones|monitor|show)}
         {--theme=dark : TUI theme (dark|light)}
         {--snapshot : Render a single TUI frame and exit without raw TTY mode}
         {--demo : Seed demo queue jobs, drop zones, and analyzer telemetry if empty}

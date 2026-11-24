@@ -16,6 +16,7 @@ use App\Services\Ffmix\CatalogService;
 use App\Services\Ffmix\DownstreamKeyService;
 use App\Services\Ffmix\FfmpegCommandBuilder;
 use App\Services\Ffmix\FolderWatchdogService;
+use App\Services\Ffmix\MacroSequenceService;
 use App\Services\Ffmix\TransitionService;
 
 class DashboardRenderer
@@ -28,6 +29,7 @@ class DashboardRenderer
         private FolderWatchdogService $watchdog,
         private DownstreamKeyService $dsk,
         private TransitionService $transitions,
+        private MacroSequenceService $macros,
     ) {}
 
     public function render(DashboardState $state, int $width, int $height): string
@@ -689,70 +691,82 @@ class DashboardRenderer
      */
     private function renderShowTab(DashboardState $state, int $width, int $height, Theme $theme): array
     {
-        $leftWidth = (int) floor($width * 0.50);
+        $leftWidth = (int) floor($width * 0.58);
         $rightWidth = $width - $leftWidth - 1;
 
-        $wdStatus = $this->watchdog->daemonStatus();
-        $wdLabel = $wdStatus['running'] ? "RUNNING (PID {$wdStatus['pid']})" : 'STOPPED ([w] Start / [z] Scan)';
+        $preview = $state->mixerSources[max(0, $state->previewSource - 1)] ?? $state->mixerSources[0];
+        $program = $state->mixerSources[max(0, $state->programSource - 1)] ?? $state->mixerSources[0];
 
-        $items = [
-            ['Active Show Name', $state->activeShowName.' ([S] switch Show)'],
-            ['Show Preset Actions', '[W] Save  │  [I] Import JSON  │  [E] Export JSON'],
-            ['Watchdog Ingest Dir', $state->watchdogInputDir],
-            ['Normalized MP4 Dir', $state->watchdogNormalizedDir],
-            ['Norm Target Format', "{$state->normalizeWidth}x{$state->normalizeHeight} @ {$state->normalizeFps}fps MP4 (slate {$state->slateDuration}s)"],
-            ['Background Watchdog', $wdLabel],
-            ['Active Transition', "{$state->activeTransition} ({$state->transitionDuration}s) ([T] change)"],
-            ['DSK HTML Folder', $state->dskFolder],
-            ['DSK Active HTML', $state->dskTemplate],
-            ['DSK Lower-Third Text', "{$state->dskTitle} │ {$state->dskSubtitle}"],
-            ['DSK Timing & Accent', "start={$state->dskStartAt}s dur={$state->dskDuration}s color={$state->dskAccent}"],
-        ];
-
-        $selected = min($state->currentIndex(), count($items) - 1);
+        $previewName = Ansi::fit($preview['name'], 22);
+        $programName = Ansi::fit($program['name'], 22);
         $leftLines = [
-            $theme->muted('[Enter] Edit  [S] Show Picker  [w] Watchdog  [z] Normalize Now  [T] Transition'),
-            $theme->muted(str_repeat('─', max(10, $leftWidth - 4))),
+            $theme->muted('[1-4] Select PVW  [Enter] Cut  [Space] Auto  [F1-F4] Overlay  [F5] Stream  [F6] Record'),
+            '',
+            $theme->success('┌──────────────── PVW / PREVIEW ────────────────┐').'  '.$theme->danger('┌──────────────── PGM / PROGRAM ────────────────┐'),
+            $theme->success('│ PVW '.str_pad($previewName, 24).' │').'  '.$theme->danger('│ PGM '.str_pad($programName, 24).' │'),
+            $theme->success('│ '.$preview['kind'].'  '.$theme->muted(str_repeat('─', 19)).' │').'  '.$theme->danger('│ '.$program['kind'].'  '.$theme->muted(str_repeat('─', 19)).' │'),
+            $theme->success('└──────────────────────────────────────────────┘').'  '.$theme->danger('└──────────────────────────────────────────────┘'),
+            '',
+            $theme->accent('SOURCE BANK'),
         ];
 
-        foreach ($items as $idx => [$key, $val]) {
-            $line = sprintf('%-21s : %s', $key, $val);
-            $leftLines[] = $idx === $selected ? $theme->selectedRow(Ansi::fit($line, $leftWidth - 4)) : $line;
+        foreach ($state->mixerSources as $index => $source) {
+            $number = $index + 1;
+            $marks = '';
+            if ($number === $state->previewSource) {
+                $marks .= $theme->success('[PVW] ');
+            }
+            if ($number === $state->programSource) {
+                $marks .= $theme->danger('[PGM] ');
+            }
+            $line = sprintf('%d  %-14s %-7s %s', $number, $source['name'], $source['kind'], $marks);
+            $leftLines[] = $number === $state->previewSource
+                ? $theme->selectedRow(Ansi::fit($line, $leftWidth - 4))
+                : Ansi::fit($line, $leftWidth - 4);
         }
 
-        $assets = NormalizedAsset::query()->orderByDesc('id')->limit(6)->get();
-        $templates = $this->dsk->listTemplates($state->dskFolder);
-        $shows = ShowPreset::query()->orderBy('id')->get();
+        $leftLines[] = '';
+        $leftLines[] = $theme->accent('SHOW').': '.$state->activeShowName.'  '.$theme->muted('Transition: '.$state->activeTransition.' '.$state->transitionDuration.'s');
 
         $rightLines = [
-            $theme->accent('Normalized Uniform MP4 Assets (Videos + Images/Slates):'),
+            $theme->accent('AUDIO MIX'),
         ];
 
-        if ($assets->isEmpty()) {
-            $rightLines[] = $theme->muted('  No normalized assets yet. Drop media/images into ingest & press [z] or [w].');
+        foreach ($state->audioChannels as $index => $channel) {
+            $active = $index === $state->selectedAudioChannel;
+            $level = max(0, min(20, (int) round($channel['level'] / 5)));
+            $meter = str_repeat('█', $level).str_repeat('·', 20 - $level);
+            $mute = $channel['mute'] ? $theme->danger(' MUTED') : $theme->success(' LIVE ');
+            $line = sprintf('%s %-8s %s %3d%s', $active ? '>' : ' ', $channel['name'], $meter, $channel['level'], $mute);
+            $rightLines[] = $active ? $theme->selectedRow(Ansi::fit($line, $rightWidth - 4)) : Ansi::fit($line, $rightWidth - 4);
+        }
+
+        $rightLines[] = '';
+        $rightLines[] = $theme->accent('OVERLAY KEYS');
+        foreach ($state->overlayKeys as $index => $overlay) {
+            $key = 'F'.($index + 1);
+            $badge = $overlay['active'] ? $theme->success(' ON') : $theme->muted('OFF');
+            $rightLines[] = sprintf(' %s  %-14s %s', $key, $overlay['name'], $badge);
+        }
+
+        $rightLines[] = '';
+        $rightLines[] = $theme->accent('TRANSPORT');
+        $rightLines[] = ' STREAM  '.($state->streamActive ? $theme->success('● LIVE') : $theme->muted('○ STOP')).'  '.$theme->muted(Ansi::fit($state->streamOutput, $rightWidth - 22));
+        $rightLines[] = ' RECORD  '.($state->recordActive ? $theme->danger('● REC') : $theme->muted('○ STOP')).'  '.$theme->muted(Ansi::fit($state->recordOutput, $rightWidth - 22));
+
+        $rightLines[] = '';
+        $rightLines[] = $theme->accent('MACRO SEQUENCE');
+        $rightLines[] = ' [M] '.($state->macroRecording ? $theme->danger('REC') : 'Record').'  [A] Add  [X] Run  '.$theme->muted($state->macroName);
+        if ($state->macroSteps === []) {
+            $rightLines[] = $theme->muted(' No macro steps.');
         } else {
-            foreach ($assets as $asset) {
-                $badge = $asset->status === 'ready' ? $theme->success('✓ MP4') : $theme->warning($asset->status);
-                $rightLines[] = sprintf('  %s [%-5s] %s -> %s', $badge, $asset->asset_type, basename($asset->source_path), basename($asset->normalized_path));
+            foreach (array_slice($state->macroSteps, 0, 5) as $stepIndex => $step) {
+                $rightLines[] = sprintf(' %02d %-12s %s', $stepIndex + 1, $step['action'], (string) $step['value']);
             }
         }
 
-        $rightLines[] = '';
-        $rightLines[] = $theme->accent('HTML Downstream Key Templates ('.count($templates).' in folder):');
-        foreach (array_slice($templates, 0, 4) as $tpl) {
-            $mark = $tpl['filename'] === $state->dskTemplate ? $theme->success('● ') : $theme->muted('○ ');
-            $rightLines[] = '  '.$mark.$tpl['filename'].' — '.$theme->muted($tpl['title']);
-        }
-
-        $rightLines[] = '';
-        $rightLines[] = $theme->accent('Saved Show Presets ('.$shows->count().'):');
-        foreach ($shows->take(4) as $sp) {
-            $mark = $sp->slug === $state->activeShowSlug ? $theme->success('★ ') : $theme->muted('· ');
-            $rightLines[] = '  '.$mark.$sp->slug.' ('.$sp->name.')';
-        }
-
-        $leftBox = Ansi::box('Show Control, Watchdog & HTML DSK', $leftLines, $leftWidth, $height, $theme, true);
-        $rightBox = Ansi::box('Normalized MP4s, DSK Templates & Show Presets', $rightLines, $rightWidth, $height, $theme);
+        $leftBox = Ansi::box('Vision Mixer · PVW / PGM', $leftLines, $leftWidth, $height, $theme, true);
+        $rightBox = Ansi::box('Audio · Overlay · Transport · Macro', $rightLines, $rightWidth, $height, $theme);
 
         return Ansi::joinColumns($leftBox, $rightBox);
     }
@@ -784,6 +798,17 @@ class DashboardRenderer
                 '  ? / Esc        Open / Close Help modal',
                 '  q              Quit cleanly and restore terminal',
                 '',
+                $theme->accent('Mixer / DSK (default initial tab)'),
+                '  1-4            Select PVW source',
+                '  Enter / Space  CUT / AUTO to PGM',
+                '  F1-F4          Toggle Lower Third / Title / Logo / Ticker',
+                '  F5 / F6        Start/Stop HLS stream / Continuous recording',
+                '  ↑/↓            Select audio channel  [u/i/o/p] Mute Main/Mic channels',
+                '  ←/→ or +/-     Adjust selected channel level',
+                '  M              Start/Stop macro recording',
+                '  N              Name macro sequence',
+                '  A / X / L      Add action / Execute macro / Load saved macro',
+                '',
                 $theme->accent('Show Presets, Watchdog & Transitions'),
                 '  S / W / I / E  Select Show Preset / Save Show / Import JSON / Export JSON',
                 '  w / z          Start/Stop Background Watchdog / Scan & Normalize MP4s now',
@@ -795,6 +820,17 @@ class DashboardRenderer
                 '  l / c / o      84 Pro LUTs / Auto CropDetect / Add Overlay',
                 '  b / v / i      Bitrate Analyser / VMAF+PSNR+SSIM+CAMBI / Probe File',
             ];
+        } elseif ($state->modal === 'macro_picker') {
+            $modalTitle = 'Select Saved Macro ([↑/↓] + [Enter])';
+            $names = $this->macros->list();
+            if ($names === []) {
+                $modalLines[] = $theme->muted('No saved macros. Press [M] in Mixer to record one.');
+            } else {
+                foreach ($names as $idx => $name) {
+                    $row = sprintf('● %-24s %s', $name, $name === $state->macroName ? 'CURRENT' : '');
+                    $modalLines[] = $idx === $state->modalCursor ? $theme->selectedRow(Ansi::fit($row, $modalWidth - 6)) : $row;
+                }
+            }
         } elseif ($state->modal === 'preset_picker') {
             $modalTitle = 'Select Preset ([↑/↓] + [Enter])';
             $presets = Preset::query()->orderBy('category')->orderBy('name')->get();

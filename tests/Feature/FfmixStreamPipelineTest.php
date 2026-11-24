@@ -157,6 +157,29 @@ it('records a real HLS stream and applies DSK overlay from CLI', function (): vo
     @rmdir($tmpDir);
 });
 
+it('builds continuous Mixer stream and record commands for local and live sources', function (): void {
+    $stream = app(StreamService::class);
+
+    $streamArgs = $stream->buildLiveStreamArgs(
+        '/Users/aldoyh/Movies/BahrainFolkloreMusic1.mp3',
+        '/tmp/ffmix-mixer-hls',
+    );
+    expect($streamArgs)
+        ->toContain('-f')
+        ->toContain('hls')
+        ->toContain('-vn')
+        ->toContain('/tmp/ffmix-mixer-hls/stream.m3u8');
+
+    $recordArgs = $stream->buildLiveRecordArgs(
+        '/Users/aldoyh/Movies/BahrainFolkloreMusic1.mp3',
+        '/tmp/ffmix-mixer-record.mp4',
+    );
+    expect($recordArgs)
+        ->toContain('-re')
+        ->toContain('-vn')
+        ->toContain('/tmp/ffmix-mixer-record.mp4');
+});
+
 it('tracks stream jobs in the database', function (): void {
     $stream = app(StreamService::class);
 

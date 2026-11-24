@@ -22,11 +22,13 @@ use App\Services\Ffmix\FfmpegCommandBuilder;
 use App\Services\Ffmix\FfmpegEnvironmentService;
 use App\Services\Ffmix\FolderWatchdogService;
 use App\Services\Ffmix\ImageSequenceService;
+use App\Services\Ffmix\MacroSequenceService;
 use App\Services\Ffmix\MediaMergeService;
 use App\Services\Ffmix\MediaProbeService;
 use App\Services\Ffmix\PipelineConfig;
 use App\Services\Ffmix\QualityMetricsService;
 use App\Services\Ffmix\ShowPresetService;
+use App\Services\Ffmix\StreamService;
 use App\Services\Ffmix\TransitionService;
 
 class DashboardController
@@ -49,6 +51,8 @@ class DashboardController
         private FolderWatchdogService $watchdog,
         private DownstreamKeyService $dsk,
         private TransitionService $transitions,
+        private StreamService $stream,
+        private MacroSequenceService $macros,
     ) {}
 
     public function run(DashboardState $state, TerminalScreen $screen): void
@@ -62,6 +66,7 @@ class DashboardController
         try {
             while (true) {
                 $this->runner->tick();
+                $this->syncMixerTransports($state);
 
                 $dims = $screen->size();
                 $frame = $this->renderer->render($state, $dims['width'], $dims['height']);
@@ -78,6 +83,8 @@ class DashboardController
             }
         } finally {
             $this->runner->stopAll();
+            $this->stopProcess(storage_path('app/ffmix/mixer-stream.pid'));
+            $this->stopProcess(storage_path('app/ffmix/mixer-record.pid'));
             $screen->restore();
         }
     }
@@ -100,6 +107,135 @@ class DashboardController
             $state->modal = 'help';
 
             return true;
+        }
+
+        if ($state->tab === DashboardTab::Show) {
+            if (in_array($key, ['1', '2', '3', '4'], true)) {
+                $state->previewSource = (int) $key;
+                $this->appendMacroStep($state, 'pvw', $state->previewSource);
+                $state->flashMessage = 'PVW selected '.$state->mixerSources[$state->previewSource - 1]['name'];
+
+                return true;
+            }
+
+            if ($key === 'ENTER') {
+                $state->programSource = $state->previewSource;
+                $this->appendMacroStep($state, 'cut', $state->programSource);
+                $state->flashMessage = 'CUT to PGM '.$state->mixerSources[$state->programSource - 1]['name'];
+
+                return true;
+            }
+
+            if ($key === ' ') {
+                $state->programSource = $state->previewSource;
+                $this->appendMacroStep($state, 'auto', $state->programSource);
+                $state->flashMessage = 'AUTO transition to '.$state->mixerSources[$state->programSource - 1]['name'];
+
+                return true;
+            }
+
+            if (in_array($key, ['F1', 'F2', 'F3', 'F4'], true)) {
+                $overlayIndex = (int) substr($key, 1) - 1;
+                $state->overlayKeys[$overlayIndex]['active'] = ! $state->overlayKeys[$overlayIndex]['active'];
+                $active = $state->overlayKeys[$overlayIndex]['active'];
+                $this->appendMacroStep($state, 'overlay', ['index' => $overlayIndex, 'active' => $active]);
+                $state->flashMessage = $state->overlayKeys[$overlayIndex]['name'].($active ? ' key ON' : ' key OFF');
+
+                return true;
+            }
+
+            if ($key === 'F5') {
+                $this->toggleMixerStream($state);
+
+                return true;
+            }
+
+            if ($key === 'F6') {
+                $this->toggleMixerRecord($state);
+
+                return true;
+            }
+
+            if ($key === 'UP' || $key === 'k') {
+                $state->selectedAudioChannel = max(0, $state->selectedAudioChannel - 1);
+
+                return true;
+            }
+
+            if ($key === 'DOWN' || $key === 'j') {
+                $state->selectedAudioChannel = min(count($state->audioChannels) - 1, $state->selectedAudioChannel + 1);
+
+                return true;
+            }
+
+            if ($key === 'LEFT' || $key === '-') {
+                $channel = &$state->audioChannels[$state->selectedAudioChannel];
+                $channel['level'] = max(0, $channel['level'] - 2);
+                $this->appendMacroStep($state, 'audio_level', ['index' => $state->selectedAudioChannel, 'level' => $channel['level']]);
+
+                return true;
+            }
+
+            if ($key === 'RIGHT' || $key === '+') {
+                $channel = &$state->audioChannels[$state->selectedAudioChannel];
+                $channel['level'] = min(100, $channel['level'] + 2);
+                $this->appendMacroStep($state, 'audio_level', ['index' => $state->selectedAudioChannel, 'level' => $channel['level']]);
+
+                return true;
+            }
+
+            if (in_array($key, ['u', 'i', 'o', 'p'], true)) {
+                $audioIndex = match ($key) {
+                    'u' => 0,
+                    'i' => 1,
+                    'o' => 2,
+                    'p' => 3,
+                };
+                $state->audioChannels[$audioIndex]['mute'] = ! $state->audioChannels[$audioIndex]['mute'];
+                $this->appendMacroStep($state, 'audio_mute', ['index' => $audioIndex, 'mute' => $state->audioChannels[$audioIndex]['mute']]);
+                $state->flashMessage = $state->audioChannels[$audioIndex]['name'].($state->audioChannels[$audioIndex]['mute'] ? ' muted' : ' unmuted');
+
+                return true;
+            }
+
+            if ($key === 'M') {
+                if (! $state->macroRecording) {
+                    $state->macroRecording = true;
+                    $state->macroSteps = [];
+                    $state->flashMessage = 'Macro RECORD started';
+                } else {
+                    $state->macroRecording = false;
+                    $path = $this->macros->save($state->macroName, $state->macroSteps);
+                    $state->flashMessage = 'Macro saved -> '.$path;
+                }
+
+                return true;
+            }
+
+            if ($key === 'A') {
+                $this->openPrompt($state, 'macro_action', 'Add macro action (pvw=2|cut=3|overlay=1:on|wait=2|stream=on|record=on):', 'pvw=2');
+
+                return true;
+            }
+
+            if ($key === 'X') {
+                $this->executeMixerMacro($state);
+
+                return true;
+            }
+
+            if ($key === 'L') {
+                $state->modal = 'macro_picker';
+                $state->modalCursor = 0;
+
+                return true;
+            }
+
+            if ($key === 'N') {
+                $this->openPrompt($state, 'macro_name', 'Name for macro sequence:', $state->macroName);
+
+                return true;
+            }
         }
 
         if ($key === 't') {
@@ -338,6 +474,25 @@ class DashboardController
             return true;
         }
 
+        if ($state->modal === 'macro_picker') {
+            $names = $this->macros->list();
+            if ($key === 'UP' || $key === 'k') {
+                $state->modalCursor = max(0, $state->modalCursor - 1);
+            } elseif ($key === 'DOWN' || $key === 'j') {
+                $state->modalCursor = min(max(0, count($names) - 1), $state->modalCursor + 1);
+            } elseif ($key === 'ENTER') {
+                $name = $names[$state->modalCursor] ?? null;
+                if ($name !== null) {
+                    $state->macroName = $name;
+                    $state->macroSteps = $this->macros->load($name);
+                    $state->flashMessage = "Loaded macro '{$name}'";
+                }
+                $state->modal = null;
+            }
+
+            return true;
+        }
+
         if ($state->modal === 'preset_picker') {
             $presets = Preset::query()->orderBy('category')->orderBy('name')->get();
             if ($key === 'UP' || $key === 'k') {
@@ -551,6 +706,238 @@ class DashboardController
         }
     }
 
+    private function appendMacroStep(DashboardState $state, string $action, mixed $value, int $delay = 0): void
+    {
+        if (! $state->macroRecording) {
+            return;
+        }
+
+        $state->macroSteps[] = [
+            'action' => $action,
+            'value' => $value,
+            'delay' => $delay,
+        ];
+    }
+
+    private function parseMacroAction(string $input): ?array
+    {
+        $parts = explode('=', $input, 2);
+        if (count($parts) !== 2) {
+            return null;
+        }
+
+        $action = strtolower(trim($parts[0]));
+        $raw = trim($parts[1]);
+
+        if ($action === 'wait' && ctype_digit($raw)) {
+            return ['action' => 'wait', 'value' => (int) $raw, 'delay' => 0];
+        }
+
+        if ($action === 'pvw' && ctype_digit($raw)) {
+            return ['action' => 'pvw', 'value' => max(1, min(4, (int) $raw)), 'delay' => 0];
+        }
+
+        if ($action === 'cut' && ctype_digit($raw)) {
+            return ['action' => 'cut', 'value' => max(1, min(4, (int) $raw)), 'delay' => 0];
+        }
+
+        if ($action === 'overlay') {
+            [$index, $mode] = array_pad(explode(':', $raw, 2), 2, 'on');
+            if (ctype_digit(trim($index))) {
+                return [
+                    'action' => 'overlay',
+                    'value' => [
+                        'index' => max(0, min(3, (int) trim($index) - 1)),
+                        'active' => strtolower(trim($mode)) !== 'off',
+                    ],
+                    'delay' => 0,
+                ];
+            }
+        }
+
+        if (in_array($action, ['stream', 'record'], true)) {
+            return [
+                'action' => $action,
+                'value' => strtolower($raw) !== 'off',
+                'delay' => 0,
+            ];
+        }
+
+        return null;
+    }
+
+    private function executeMixerMacro(DashboardState $state): void
+    {
+        if ($state->macroSteps === []) {
+            $state->flashMessage = 'Macro has no steps';
+
+            return;
+        }
+
+        foreach ($state->macroSteps as $step) {
+            $this->applyMixerMacroStep($state, $step);
+            $delay = (int) ($step['delay'] ?? 0);
+            if ($delay > 0) {
+                usleep($delay * 1000000);
+            }
+        }
+
+        $state->flashMessage = 'Executed macro with '.count($state->macroSteps).' step(s)';
+    }
+
+    private function applyMixerMacroStep(DashboardState $state, array $step): void
+    {
+        $action = (string) ($step['action'] ?? '');
+        $value = $step['value'] ?? null;
+
+        if ($action === 'pvw' && is_numeric($value)) {
+            $state->previewSource = max(1, min(4, (int) $value));
+        } elseif (in_array($action, ['cut', 'auto'], true) && is_numeric($value)) {
+            $state->programSource = max(1, min(4, (int) $value));
+        } elseif ($action === 'overlay' && is_array($value)) {
+            $index = (int) ($value['index'] ?? 0);
+            $state->overlayKeys[$index]['active'] = (bool) ($value['active'] ?? false);
+        } elseif ($action === 'audio_level' && is_array($value)) {
+            $index = (int) ($value['index'] ?? 0);
+            $state->audioChannels[$index]['level'] = max(0, min(100, (int) ($value['level'] ?? 0)));
+        } elseif ($action === 'audio_mute' && is_array($value)) {
+            $index = (int) ($value['index'] ?? 0);
+            $state->audioChannels[$index]['mute'] = (bool) ($value['mute'] ?? false);
+        } elseif ($action === 'stream') {
+            $active = (bool) $value;
+            if ($active && ! $state->streamActive) {
+                $this->toggleMixerStream($state);
+            } elseif (! $active && $state->streamActive) {
+                $this->toggleMixerStream($state);
+            }
+        } elseif ($action === 'record') {
+            $active = (bool) $value;
+            if ($active && ! $state->recordActive) {
+                $this->toggleMixerRecord($state);
+            } elseif (! $active && $state->recordActive) {
+                $this->toggleMixerRecord($state);
+            }
+        } elseif ($action === 'wait') {
+            $delay = (int) $value;
+            if ($delay > 0) {
+                usleep($delay * 1000000);
+            }
+        }
+    }
+
+    private function toggleMixerStream(DashboardState $state): void
+    {
+        $pidFile = storage_path('app/ffmix/mixer-stream.pid');
+        if ($this->processIsRunning($pidFile)) {
+            $this->stopProcess($pidFile);
+            $state->streamActive = false;
+            $this->appendMacroStep($state, 'stream', false);
+            $state->flashMessage = 'Mixer HLS stream stopped';
+
+            return;
+        }
+
+        $source = $state->mixerSources[max(0, $state->programSource - 1)]['source'];
+        $outputDir = base_path('public/hls');
+        $logFile = storage_path('logs/ffmix-mixer-stream.log');
+        $args = $this->stream->buildLiveStreamArgs($source, $outputDir);
+        $command = 'nohup '.implode(' ', array_map('escapeshellarg', $args)).' > '.escapeshellarg($logFile).' 2>&1 & echo $!';
+        $pid = (int) trim((string) shell_exec($command));
+
+        if ($pid > 0) {
+            if (! is_dir(dirname($pidFile))) {
+                mkdir(dirname($pidFile), 0775, true);
+            }
+            file_put_contents($pidFile, (string) $pid);
+            $state->streamActive = true;
+            $state->streamOutput = 'public/hls/stream.m3u8';
+            $this->appendMacroStep($state, 'stream', true);
+            $state->flashMessage = "Mixer HLS stream started (PID {$pid})";
+        } else {
+            $state->streamActive = false;
+            $state->flashMessage = 'Mixer HLS stream failed to start';
+        }
+    }
+
+    private function toggleMixerRecord(DashboardState $state): void
+    {
+        $pidFile = storage_path('app/ffmix/mixer-record.pid');
+        if ($this->processIsRunning($pidFile)) {
+            $this->stopProcess($pidFile);
+            $state->recordActive = false;
+            $this->appendMacroStep($state, 'record', false);
+            $state->flashMessage = 'Mixer recording stopped';
+
+            return;
+        }
+
+        $source = $state->mixerSources[max(0, $state->programSource - 1)]['source'];
+        $recordDir = base_path($state->recordOutput);
+        if (! is_dir($recordDir)) {
+            mkdir($recordDir, 0775, true);
+        }
+        $outputPath = $recordDir.'/ffmix-mixer-'.date('Ymd-His').'.mp4';
+        $logFile = storage_path('logs/ffmix-mixer-record.log');
+        $args = $this->stream->buildLiveRecordArgs($source, $outputPath);
+        $command = 'nohup '.implode(' ', array_map('escapeshellarg', $args)).' > '.escapeshellarg($logFile).' 2>&1 & echo $!';
+        $pid = (int) trim((string) trim((string) shell_exec($command)));
+
+        if ($pid > 0) {
+            if (! is_dir(dirname($pidFile))) {
+                mkdir(dirname($pidFile), 0775, true);
+            }
+            file_put_contents($pidFile, (string) $pid);
+            file_put_contents($pidFile.'.output', $outputPath);
+            $state->recordActive = true;
+            $this->appendMacroStep($state, 'record', true);
+            $state->flashMessage = "Mixer recording started -> {$outputPath}";
+        } else {
+            $state->recordActive = false;
+            $state->flashMessage = 'Mixer recording failed to start';
+        }
+    }
+
+    private function processIsRunning(string $pidFile): bool
+    {
+        if (! is_file($pidFile)) {
+            return false;
+        }
+
+        $pid = (int) trim((string) file_get_contents($pidFile));
+        if ($pid <= 0) {
+            return false;
+        }
+
+        $running = function_exists('posix_kill') ? @posix_kill($pid, 0) : true;
+        if (! $running) {
+            @unlink($pidFile);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private function stopProcess(string $pidFile): void
+    {
+        if (! is_file($pidFile)) {
+            return;
+        }
+
+        $pid = (int) trim((string) file_get_contents($pidFile));
+        if ($pid > 0 && function_exists('posix_kill')) {
+            @posix_kill($pid, 15);
+        }
+        @unlink($pidFile);
+        @unlink($pidFile.'.output');
+    }
+
+    private function syncMixerTransports(DashboardState $state): void
+    {
+        $state->streamActive = $this->processIsRunning(storage_path('app/ffmix/mixer-stream.pid'));
+        $state->recordActive = $this->processIsRunning(storage_path('app/ffmix/mixer-record.pid'));
+    }
+
     private function openPrompt(DashboardState $state, string $modal, string $prompt, string $initial): void
     {
         $state->modal = $modal;
@@ -565,7 +952,20 @@ class DashboardController
         $state->modal = null;
 
         try {
-            if ($modal === 'add_job' && $val !== '') {
+            if ($modal === 'macro_name' && $val !== '') {
+                $state->macroName = $val;
+                $state->flashMessage = "Macro name set to '{$val}'";
+            } elseif ($modal === 'macro_action' && $val !== '') {
+                $parsed = $this->parseMacroAction($val);
+                if ($parsed !== null) {
+                    $state->macroSteps[] = $parsed;
+                    $state->macroName = $state->macroName ?: 'Manual Mix';
+                    $this->applyMixerMacroStep($state, $parsed);
+                    $state->flashMessage = 'Added & applied macro action: '.$parsed['action'];
+                } else {
+                    $state->flashMessage = 'Invalid macro action. Use pvw=2|cut=3|overlay=1:on|wait=2|stream=on|record=on';
+                }
+            } elseif ($modal === 'add_job' && $val !== '') {
                 $out = preg_replace('/\.[^.]+$/', '', $val).'_ffmix.'.$state->pipeline->container;
                 $preview = $this->builder->toShellString($this->builder->build($val, $out, $state->pipeline, true));
                 $job = MediaJob::query()->create([

@@ -9,7 +9,7 @@ use App\Services\Ffmix\PipelineConfig;
 
 class DashboardState
 {
-    public DashboardTab $tab = DashboardTab::Queue;
+    public DashboardTab $tab = DashboardTab::Show;
 
     public ThemeMode $theme = ThemeMode::Dark;
 
@@ -84,6 +84,51 @@ class DashboardState
 
     /** @var array<string, mixed>|null */
     public ?array $lastProbe = null;
+
+    public int $previewSource = 1;
+
+    public int $programSource = 1;
+
+    /** @var list<array{name: string, source: string, kind: string}> */
+    public array $mixerSources = [
+        ['name' => 'Bahrain TV', 'source' => 'https://5c7b683162943.streamlock.net/live/ngrp:bahraintvmain_all/playlist.m3u8', 'kind' => 'HLS'],
+        ['name' => 'Manama', 'source' => '/Users/aldoyh/Movies/Bahrain - Manama [vPwtOiUXxTw].mp4', 'kind' => 'FILE'],
+        ['name' => 'Ours. Yours.', 'source' => '/Users/aldoyh/Movies/Ours. Yours. Bahrain [15BefRzSQ6I].mp4', 'kind' => 'FILE'],
+        ['name' => 'Radio 98.4', 'source' => 'https://5c7b683162943.streamlock.net/live/ngrp:radio-98-4_all/chunklist_w1027272218_b981072.m3u8', 'kind' => 'AUDIO'],
+    ];
+
+    /** @var list<array{name: string, level: int, mute: bool}> */
+    public array $audioChannels = [
+        ['name' => 'Main 1', 'level' => 72, 'mute' => false],
+        ['name' => 'Main 2', 'level' => 68, 'mute' => false],
+        ['name' => 'Mic 1', 'level' => 64, 'mute' => false],
+        ['name' => 'Mic 2', 'level' => 58, 'mute' => false],
+    ];
+
+    /** @var list<array{name: string, active: bool}> */
+    public array $overlayKeys = [
+        ['name' => 'Lower Third', 'active' => false],
+        ['name' => 'Title Card', 'active' => false],
+        ['name' => 'Logo', 'active' => false],
+        ['name' => 'Ticker', 'active' => false],
+    ];
+
+    public bool $streamActive = false;
+
+    public bool $recordActive = false;
+
+    public string $streamOutput = 'public/hls/stream.m3u8';
+
+    public string $recordOutput = 'storage/app/ffmix/recordings';
+
+    public int $selectedAudioChannel = 0;
+
+    public bool $macroRecording = false;
+
+    public string $macroName = 'Main Mix';
+
+    /** @var list<array{action: string, value: mixed, delay: int}> */
+    public array $macroSteps = [];
 
     /** @var array{
      *   available: bool,
