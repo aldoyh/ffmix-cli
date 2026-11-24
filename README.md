@@ -24,7 +24,7 @@ See [docs/PRD.md](docs/PRD.md) for the complete Product Requirements Document.
 ./ffmix --theme=light
 
 # Normal launches also start the local welcome server and open the FaceTime multiview
-./ffmix --browser-port=8000
+./ffmix --browser-port=8077
 
 # Disable automatic browser/server launch
 ./ffmix --no-browser
@@ -39,7 +39,7 @@ See [docs/PRD.md](docs/PRD.md) for the complete Product Requirements Document.
 
 ### Sample Media
 
-The stream dashboard discovers every supported video and audio file under `~/Movies` and adds two live HLS sources:
+The stream dashboard discovers every supported video and audio file under `~/Movies` and adds two live HLS sources (accessible at `http://127.0.0.1:8077/stream`):
 
 - Bahrain - Manama
 - Ours. Yours. Bahrain
@@ -50,7 +50,7 @@ The stream dashboard discovers every supported video and audio file under `~/Mov
 - Bahrain TV Live
 - Radio 98.4 Live
 
-Use the Sample Media selector in `http://127.0.0.1:8000/stream` to probe or record a sample. The recording runs as a background CLI process, while the fixed footer reports Web, Watchdog, and Stream status.
+Use the Sample Media selector in `http://127.0.0.1:8077/stream` to probe or record a sample. The recording runs as a background CLI process, while the fixed footer reports Web, Watchdog, and Stream status.
 
 ---
 
