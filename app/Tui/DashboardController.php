@@ -99,10 +99,6 @@ class DashboardController
             return $this->handleModalKey($state, $key);
         }
 
-        if ($key === 'q' || $key === 'Q') {
-            return false;
-        }
-
         if ($key === '?') {
             $state->modal = 'help';
 
@@ -134,8 +130,13 @@ class DashboardController
                 return true;
             }
 
-            if (in_array($key, ['F1', 'F2', 'F3', 'F4'], true)) {
-                $overlayIndex = (int) substr($key, 1) - 1;
+            if (in_array($key, ['Q', 'W', 'E', 'R'], true)) {
+                $overlayIndex = match ($key) {
+                    'Q' => 0,
+                    'W' => 1,
+                    'E' => 2,
+                    'R' => 3,
+                };
                 $state->overlayKeys[$overlayIndex]['active'] = ! $state->overlayKeys[$overlayIndex]['active'];
                 $active = $state->overlayKeys[$overlayIndex]['active'];
                 $this->appendMacroStep($state, 'overlay', ['index' => $overlayIndex, 'active' => $active]);
@@ -144,13 +145,13 @@ class DashboardController
                 return true;
             }
 
-            if ($key === 'F5') {
+            if ($key === 'T') {
                 $this->toggleMixerStream($state);
 
                 return true;
             }
 
-            if ($key === 'F6') {
+            if ($key === 'Y') {
                 $this->toggleMixerRecord($state);
 
                 return true;
@@ -236,6 +237,10 @@ class DashboardController
 
                 return true;
             }
+        }
+
+        if ($key === 'q' || $key === 'Q') {
+            return false;
         }
 
         if ($key === 't') {

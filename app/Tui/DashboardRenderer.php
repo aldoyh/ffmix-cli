@@ -727,6 +727,7 @@ class DashboardRenderer
 
         $leftLines[] = '';
         $leftLines[] = $theme->accent('SHOW').': '.$state->activeShowName.'  '.$theme->muted('Transition: '.$state->activeTransition.' '.$state->transitionDuration.'s');
+        $leftLines[] = $theme->muted('Show Control, Watchdog & HTML DSK');
 
         $rightLines = [
             $theme->accent('AUDIO MIX'),
@@ -801,8 +802,8 @@ class DashboardRenderer
                 $theme->accent('Mixer / DSK (default initial tab)'),
                 '  1-4            Select PVW source',
                 '  Enter / Space  CUT / AUTO to PGM',
-                '  F1-F4          Toggle Lower Third / Title / Logo / Ticker',
-                '  F5 / F6        Start/Stop HLS stream / Continuous recording',
+                '  ⇧Q / ⇧W / ⇧E / ⇧R   Toggle Lower Third / Title / Logo / Ticker',
+                '  ⇧T / ⇧Y             Start/Stop HLS stream / Continuous recording',
                 '  ↑/↓            Select audio channel  [u/i/o/p] Mute Main/Mic channels',
                 '  ←/→ or +/-     Adjust selected channel level',
                 '  M              Start/Stop macro recording',

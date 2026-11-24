@@ -75,7 +75,7 @@ it('controls the Mixer PVW PGM overlay audio and macro sequence', function (): v
     expect($controller->handleKey($state, 'ENTER'))->toBeTrue()
         ->and($state->programSource)->toBe(2);
 
-    expect($controller->handleKey($state, 'F1'))->toBeTrue()
+    expect($controller->handleKey($state, 'Q'))->toBeTrue()
         ->and($state->overlayKeys[0]['active'])->toBeTrue();
 
     expect($controller->handleKey($state, 'RIGHT'))->toBeTrue()

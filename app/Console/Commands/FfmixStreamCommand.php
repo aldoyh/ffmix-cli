@@ -11,7 +11,7 @@ use Illuminate\Console\Command;
 class FfmixStreamCommand extends Command
 {
     protected $signature = 'ffmix:stream
-        {action=record : Action (record|hls|list|info|jobs|monitor)}
+        {action=record : Action (record|qualities|hls|list|info|jobs|monitor)}
         {--stream-url= : HLS master playlist URL}
         {--monitor-url= : Override monitor dashboard URL}
         {--output= : Output MP4 file path}
@@ -103,6 +103,10 @@ class FfmixStreamCommand extends Command
         }
 
         if ($action === 'hls') {
+            return $this->handleHls($hls);
+        }
+
+        if ($action === 'qualities') {
             return $this->handleHls($hls);
         }
 

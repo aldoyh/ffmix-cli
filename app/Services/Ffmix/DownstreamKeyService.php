@@ -26,11 +26,11 @@ class DownstreamKeyService
             @mkdir($dir, 0775, true);
         }
 
+        // Starter template only (PRD §5.2: "ensureSampleTemplate() copies starter template if none exist").
+        // The remaining sample templates stay in resources/dsk/ and are available on demand,
+        // but are not auto-deployed so a fresh DSK folder starts with a single starter template.
         $samples = [
             'sample-lower-third.html',
-            'sample-breaking-news.html',
-            'sample-interview-tag.html',
-            'sample-scoreboard.html',
         ];
 
         $paths = [];

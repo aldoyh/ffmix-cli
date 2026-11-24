@@ -75,9 +75,9 @@ Use the Sample Media selector in `http://127.0.0.1:8077/stream` to probe or reco
 - `1`–`4`: Select the **PVW** source
 - `Enter`: **CUT** PVW to PGM
 - `Space`: **AUTO** transition PVW to PGM
-- `F1`–`F4`: Toggle Lower Third, Title Card, Logo, and Ticker overlay keys
-- `F5`: Start/Stop continuous local HLS output from PGM
-- `F6`: Start/Stop continuous MP4 recording from PGM
+- `⇧Q`–`⇧R`: Toggle Lower Third, Title Card, Logo, and Ticker overlay keys
+- `⇧T`: Start/Stop continuous local HLS output from PGM
+- `⇧Y`: Start/Stop continuous MP4 recording from PGM
 - `Up` / `Down`: Select an audio channel
 - `Left` / `Right` or `-` / `+`: Adjust the selected channel level
 - `u` / `i` / `o` / `p`: Mute/unmute Main 1, Main 2, Mic 1, and Mic 2

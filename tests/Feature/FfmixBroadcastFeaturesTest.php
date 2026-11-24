@@ -237,6 +237,8 @@ it('opens Show Preset picker and Transition picker modals in TUI controller and 
         ->and($state->modal)->toBe('show_picker');
     expect($controller->handleKey($state, 'ESC'))->toBeTrue();
 
+    // Transition picker is a global key (outside Show tab where ⇧T toggles stream)
+    $state->tab = DashboardTab::Queue;
     expect($controller->handleKey($state, 'T'))->toBeTrue()
         ->and($state->modal)->toBe('transition_picker');
     expect($controller->handleKey($state, 'ESC'))->toBeTrue();

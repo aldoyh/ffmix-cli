@@ -42,7 +42,7 @@ class FfmixDashboardCommand extends Command
         {--no-browser : Do not start or open the local web welcome page}
         {--browser-url= : Open a specific web URL instead of starting the local server}
         {--browser-host=127.0.0.1 : Local web server host}
-        {--browser-port=8000 : Local web server port}';
+        {--browser-port= : Local web server port (persisted across runs)}';
 
     /**
      * The console command description.
@@ -50,6 +50,8 @@ class FfmixDashboardCommand extends Command
      * @var string
      */
     protected $description = 'Launch the ffMix interactive TUI Broadcast & Media Workstation Dashboard';
+
+    private ?int $effectiveBrowserPort = null;
 
     public function handle(
         DashboardController $controller,
@@ -107,6 +109,7 @@ class FfmixDashboardCommand extends Command
 
         $webServer = null;
         if (! (bool) $this->option('no-browser')) {
+            $this->resolveBrowserPort();
             $webServer = $this->launchBrowser();
         }
 
@@ -122,7 +125,7 @@ class FfmixDashboardCommand extends Command
 
         if ($browserUrl === '') {
             $host = trim((string) $this->option('browser-host')) ?: '127.0.0.1';
-            $port = max(1, min(65535, (int) $this->option('browser-port')));
+            $port = $this->effectiveBrowserPort ?? max(1, min(65535, (int) $this->option('browser-port')));
             $browserUrl = "http://{$host}:{$port}/";
 
             try {
@@ -156,6 +159,52 @@ class FfmixDashboardCommand extends Command
         $this->line("Browser: {$browserUrl}");
 
         return $webServer;
+    }
+
+    /** Resolve the browser port: CLI option > persisted file > default 8000. */
+    private function resolveBrowserPort(): void
+    {
+        $cliPort = trim((string) $this->option('browser-port'));
+        $persistedPort = $this->loadPersistedBrowserPort();
+        $port = $cliPort !== '' ? (int) $cliPort : (int) ($persistedPort ?? 8000);
+        $port = max(1, min(65535, $port));
+
+        if ($cliPort !== '') {
+            $this->savePersistedBrowserPort($port);
+        }
+
+        $this->effectiveBrowserPort = $port;
+    }
+
+    private function browserPortPath(): string
+    {
+        $dir = storage_path('app/ffmix');
+        if (! is_dir($dir)) {
+            @mkdir($dir, 0775, true);
+        }
+
+        return $dir.'/browser-port.json';
+    }
+
+    private function loadPersistedBrowserPort(): ?int
+    {
+        $path = $this->browserPortPath();
+        if (! is_file($path)) {
+            return null;
+        }
+
+        $data = json_decode((string) file_get_contents($path), true);
+        if (is_array($data) && isset($data['port']) && is_numeric($data['port'])) {
+            return (int) $data['port'];
+        }
+
+        return null;
+    }
+
+    private function savePersistedBrowserPort(int $port): void
+    {
+        $path = $this->browserPortPath();
+        file_put_contents($path, json_encode(['port' => $port], JSON_PRETTY_PRINT));
     }
 
     private function recordRuntimeError(string $service, string $message): void
