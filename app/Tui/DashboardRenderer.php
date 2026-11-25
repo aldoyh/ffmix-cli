@@ -34,41 +34,47 @@ class DashboardRenderer
 
     public function render(DashboardState $state, int $width, int $height): string
     {
+        // Cap the rendering width so the TUI never over-stretches on very wide terminals.
+        // Content is centered within the actual terminal width.
+        $maxWidth = 120;
+        $effectiveWidth = min($width, $maxWidth);
+        $leftPad = str_repeat(' ', max(0, (int) floor(($width - $effectiveWidth) / 2)));
+
         $theme = new Theme($state->theme);
         $lines = [];
 
         // Rows 1-5: Concise ASCII Banner (ffMix) + Active Show & Telemetry Container
-        foreach ($this->renderBannerContainer($state, $width, $theme) as $headerLine) {
-            $lines[] = $headerLine;
+        foreach ($this->renderBannerContainer($state, $effectiveWidth, $theme) as $headerLine) {
+            $lines[] = $leftPad.$headerLine;
         }
 
         // Row 6: Tab Bar
-        $lines[] = $this->renderTabBar($state, $width, $theme);
+        $lines[] = $leftPad.$this->renderTabBar($state, $effectiveWidth, $theme);
 
         // Main Body (height - 7 rows: 5 banner + 1 tab bar + 1 footer)
         $bodyHeight = max(12, $height - 7);
         $bodyLines = match ($state->tab) {
-            DashboardTab::Queue => $this->renderQueueTab($state, $width, $bodyHeight, $theme),
-            DashboardTab::Studio => $this->renderStudioTab($state, $width, $bodyHeight, $theme),
-            DashboardTab::VisualFx => $this->renderVisualFxTab($state, $width, $bodyHeight, $theme),
-            DashboardTab::Audio => $this->renderAudioTab($state, $width, $bodyHeight, $theme),
-            DashboardTab::Analyzer => $this->renderAnalyzerTab($state, $width, $bodyHeight, $theme),
-            DashboardTab::Tools => $this->renderToolsTab($state, $width, $bodyHeight, $theme),
-            DashboardTab::DropZones => $this->renderDropZonesTab($state, $width, $bodyHeight, $theme),
-            DashboardTab::Monitor => $this->renderMonitorTab($state, $width, $bodyHeight, $theme),
-            DashboardTab::Show => $this->renderShowTab($state, $width, $bodyHeight, $theme),
+            DashboardTab::Queue => $this->renderQueueTab($state, $effectiveWidth, $bodyHeight, $theme),
+            DashboardTab::Studio => $this->renderStudioTab($state, $effectiveWidth, $bodyHeight, $theme),
+            DashboardTab::VisualFx => $this->renderVisualFxTab($state, $effectiveWidth, $bodyHeight, $theme),
+            DashboardTab::Audio => $this->renderAudioTab($state, $effectiveWidth, $bodyHeight, $theme),
+            DashboardTab::Analyzer => $this->renderAnalyzerTab($state, $effectiveWidth, $bodyHeight, $theme),
+            DashboardTab::Tools => $this->renderToolsTab($state, $effectiveWidth, $bodyHeight, $theme),
+            DashboardTab::DropZones => $this->renderDropZonesTab($state, $effectiveWidth, $bodyHeight, $theme),
+            DashboardTab::Monitor => $this->renderMonitorTab($state, $effectiveWidth, $bodyHeight, $theme),
+            DashboardTab::Show => $this->renderShowTab($state, $effectiveWidth, $bodyHeight, $theme),
         };
 
         if ($state->modal !== null) {
-            $bodyLines = $this->overlayModal($bodyLines, $state, $width, $bodyHeight, $theme);
+            $bodyLines = $this->overlayModal($bodyLines, $state, $effectiveWidth, $bodyHeight, $theme);
         }
 
         foreach ($bodyLines as $line) {
-            $lines[] = $line;
+            $lines[] = $leftPad.$line;
         }
 
         // Bottom Footer Bar
-        $lines[] = $this->renderFooter($state, $width, $theme);
+        $lines[] = $leftPad.$this->renderFooter($state, $effectiveWidth, $theme);
 
         return implode("\n", $lines);
     }
@@ -700,7 +706,7 @@ class DashboardRenderer
         $previewName = Ansi::fit($preview['name'], 22);
         $programName = Ansi::fit($program['name'], 22);
         $leftLines = [
-            $theme->muted('[1-4] Select PVW  [Enter] Cut  [Space] Auto  [F1-F4] Overlay  [F5] Stream  [F6] Record'),
+            $theme->muted('[1-4] Select PVW  [Enter] Cut  [Space] Auto  [⇧Q-⇧R] Overlay  [⇧T] Stream  [⇧Y] Record'),
             '',
             $theme->success('┌──────────────── PVW / PREVIEW ────────────────┐').'  '.$theme->danger('┌──────────────── PGM / PROGRAM ────────────────┐'),
             $theme->success('│ PVW '.str_pad($previewName, 24).' │').'  '.$theme->danger('│ PGM '.str_pad($programName, 24).' │'),
@@ -744,8 +750,9 @@ class DashboardRenderer
 
         $rightLines[] = '';
         $rightLines[] = $theme->accent('OVERLAY KEYS');
+        $overlayKeyLabels = ['⇧Q', '⇧W', '⇧E', '⇧R'];
         foreach ($state->overlayKeys as $index => $overlay) {
-            $key = 'F'.($index + 1);
+            $key = $overlayKeyLabels[$index] ?? 'F'.($index + 1);
             $badge = $overlay['active'] ? $theme->success(' ON') : $theme->muted('OFF');
             $rightLines[] = sprintf(' %s  %-14s %s', $key, $overlay['name'], $badge);
         }

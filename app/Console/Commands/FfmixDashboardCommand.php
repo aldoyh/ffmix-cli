@@ -161,19 +161,58 @@ class FfmixDashboardCommand extends Command
         return $webServer;
     }
 
-    /** Resolve the browser port: CLI option > persisted file > default 8000. */
+    /** Resolve the browser port: CLI option > persisted file > default 8077. Skips busy ports. */
     private function resolveBrowserPort(): void
     {
         $cliPort = trim((string) $this->option('browser-port'));
         $persistedPort = $this->loadPersistedBrowserPort();
-        $port = $cliPort !== '' ? (int) $cliPort : (int) ($persistedPort ?? 8000);
+        $port = $cliPort !== '' ? (int) $cliPort : (int) ($persistedPort ?? 8077);
         $port = max(1, min(65535, $port));
 
-        if ($cliPort !== '') {
+        // If the resolved port is busy, find the next available one.
+        if ($this->isPortBusy($port)) {
+            $this->warn("Port {$port} is already in use — searching for an available port...");
+            $port = $this->findAvailablePort($port);
+            $this->line("Using port {$port} instead.");
+        }
+
+        if ($cliPort !== '' || $persistedPort === null) {
             $this->savePersistedBrowserPort($port);
         }
 
         $this->effectiveBrowserPort = $port;
+    }
+
+    /** Check whether a TCP port is currently accepting connections on localhost. */
+    private function isPortBusy(int $port): bool
+    {
+        $host = trim((string) $this->option('browser-host')) ?: '127.0.0.1';
+
+        $socket = @fsockopen($host, $port, $errno, $errstr, 1);
+        if ($socket === false) {
+            return false;
+        }
+
+        fclose($socket);
+
+        return true;
+    }
+
+    /** Starting from $startPort, find the first port that is not busy. */
+    private function findAvailablePort(int $startPort): int
+    {
+        $port = max(1, min(65535, $startPort));
+        $tries = 0;
+
+        while ($this->isPortBusy($port) && $tries < 100) {
+            $port++;
+            if ($port > 65535) {
+                $port = 1;
+            }
+            $tries++;
+        }
+
+        return $port;
     }
 
     private function browserPortPath(): string
